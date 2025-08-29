@@ -359,6 +359,99 @@
         .search-position {
             position: relative;
         }
+
+        .cross-references {
+            background: #f8f9ff;
+            border: 1px solid #e3e8ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .reference-category {
+            margin-bottom: 10px;
+        }
+
+        .reference-category ul {
+            margin: 5px 0 0 20px;
+            padding: 0;
+        }
+
+        .reference-category li {
+            margin: 3px 0;
+            font-size: 14px;
+        }
+
+        .classification-reason,
+        .charge-value {
+            margin: 10px 0;
+            padding: 8px 12px;
+            background: #f1f3f4;
+            border-left: 3px solid #4285f4;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .analysis-info {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #666;
+        }
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(32, 201, 151, 0.3);
+        }
+
+        /* Enhanced workflow display */
+        .workflow-timeline .timeline-item .content h4 {
+            color: #1e3c72;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+
+        .workflow-timeline .timeline-item .content .description {
+            color: #666;
+            font-size: 13px;
+            font-style: italic;
+            margin: 5px 0;
+        }
+
+        .workflow-timeline .timeline-item.completed {
+            opacity: 0.7;
+            background: #f8f9fa;
+        }
+
+        .workflow-timeline .timeline-item.urgent {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+
+        .next-actions {
+            background: #e8f5e8;
+            border: 1px solid #c3e6c3;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .next-actions h4 {
+            color: #155724;
+            margin-bottom: 10px;
+        }
+
+        .next-actions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .next-actions li {
+            margin: 5px 0;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -384,6 +477,7 @@
                 <div class="form-group">
                     <button class="btn" onclick="loadDefaultFiles()">Load Default Files</button>
                     <button class="btn btn-secondary" onclick="clearFiles()">Clear All</button>
+                    <button class="btn btn-success" onclick="validateSystem()">Validate System</button>
                 </div>
             </div>
 
@@ -557,33 +651,180 @@
             }
 
             extractPenalty(sectionText) {
-                const penaltyPatterns = [
-                    /imprisonment for (?:not more than )?(\d+)\s*(years?|months?)/gi,
-                    /penalty of (\d+)\s*penalty units/gi,
-                    /fine of \$(\d+(?:,\d{3})*)/gi,
-                    /(\d+)\s*penalty units/gi,
-                    /maximum penalty[:\s]*(\d+(?:\.\d+)?)\s*(years?|months?)/gi,
-                    /(\d+)\s*years?\s*imprisonment/gi
-                ];
+                // Enhanced penalty extraction for ALL NSW formats
+                const formats = {
+                    // Life imprisonment (highest priority)
+                    life: /\blife\s+imprisonment\b/gi,
+                    
+                    // Standard: "imprisonment for X years"
+                    standard: /imprisonment\s+for\s+(?:not\s+more\s+than\s+)?(\d+)\s+(years?|months?)/gi,
+                    
+                    // Alternative: "X years imprisonment"
+                    alternative: /(\d+)\s+(years?|months?)\s+imprisonment/gi,
+                    
+                    // Penalty units: "50 penalty units"
+                    units: /(\d+)\s+penalty\s+units/gi,
+                    
+                    // Fine formats: "fine of $5,000", "fine not exceeding $10,000"
+                    fine: /fine\s+(?:not\s+exceeding\s+|of\s+)?\$?([\d,]+)/gi,
+                    
+                    // Maximum penalty prefix with various formats
+                    maximum: /maximum\s+penalty[:\s]*(.*?)(?=\.|$|\n)/gi,
+                    
+                    // Penalty in brackets: "(Penalty: 2 years imprisonment)"
+                    bracket: /\(penalty[:\s]*(.*?)\)/gi,
+                    
+                    // NSW specific: "not more than X years"
+                    notMoreThan: /not\s+more\s+than\s+(\d+)\s+(years?|months?)/gi,
+                    
+                    // NSW pecuniary penalties
+                    pecuniary: /(\d+)\s+penalty\s+units?\s+or\s+imprisonment\s+for\s+(\d+)\s+(years?|months?)/gi
+                };
 
-                let penalty = {};
-                
-                penaltyPatterns.forEach(pattern => {
+                let penalty = {
+                    years: 0,
+                    months: 0,
+                    units: 0,
+                    fine: 0,
+                    life: false,
+                    text: '',
+                    alternatives: []
+                };
+
+                // Check for life imprisonment first
+                if (formats.life.test(sectionText)) {
+                    penalty.life = true;
+                    penalty.years = 999; // For comparison purposes
+                    penalty.text = 'Life imprisonment';
+                    return penalty;
+                }
+
+                // Process each format type
+                for (const [formatName, pattern] of Object.entries(formats)) {
                     let match;
+                    pattern.lastIndex = 0; // Reset regex
+                    
                     while ((match = pattern.exec(sectionText)) !== null) {
-                        if (match[0].includes('year')) {
-                            penalty.years = parseInt(match[1]);
-                        } else if (match[0].includes('month')) {
-                            penalty.months = parseInt(match[1]);
-                        } else if (match[0].includes('penalty unit')) {
-                            penalty.units = parseInt(match[1]);
-                        } else if (match[0].includes('fine') || match[0].includes('$')) {
-                            penalty.fine = parseInt(match[1].replace(/,/g, ''));
-                        }
+                        this.processPenaltyMatch(match, formatName, penalty);
                     }
-                });
+                }
 
-                return Object.keys(penalty).length > 0 ? penalty : null;
+                // Extract from maximum penalty clauses
+                const maxPenaltyMatch = sectionText.match(/maximum\s+penalty[:\s]*(.*?)(?=\.|$|\n)/gi);
+                if (maxPenaltyMatch) {
+                    maxPenaltyMatch.forEach(clause => {
+                        this.extractFromMaximumClause(clause, penalty);
+                    });
+                }
+
+                // Build penalty text description
+                penalty.text = this.buildPenaltyText(penalty);
+
+                return Object.keys(penalty).some(key => penalty[key] && key !== 'text' && key !== 'alternatives') ? penalty : null;
+            }
+
+            processPenaltyMatch(match, formatName, penalty) {
+                const fullMatch = match[0].toLowerCase();
+                
+                switch (formatName) {
+                    case 'standard':
+                    case 'alternative':
+                    case 'notMoreThan':
+                        const value = parseInt(match[1]);
+                        const unit = match[2].toLowerCase();
+                        
+                        if (unit.includes('year')) {
+                            penalty.years = Math.max(penalty.years, value);
+                        } else if (unit.includes('month')) {
+                            penalty.months = Math.max(penalty.months, value);
+                        }
+                        break;
+                        
+                    case 'units':
+                        penalty.units = Math.max(penalty.units, parseInt(match[1]));
+                        break;
+                        
+                    case 'fine':
+                        const fineAmount = parseInt(match[1].replace(/,/g, ''));
+                        penalty.fine = Math.max(penalty.fine, fineAmount);
+                        break;
+                        
+                    case 'pecuniary':
+                        // Handle "X penalty units or Y years imprisonment"
+                        penalty.units = Math.max(penalty.units, parseInt(match[1]));
+                        const impValue = parseInt(match[2]);
+                        const impUnit = match[3].toLowerCase();
+                        
+                        if (impUnit.includes('year')) {
+                            penalty.years = Math.max(penalty.years, impValue);
+                        } else if (impUnit.includes('month')) {
+                            penalty.months = Math.max(penalty.months, impValue);
+                        }
+                        
+                        penalty.alternatives.push({
+                            type: 'alternative',
+                            units: parseInt(match[1]),
+                            imprisonment: { value: impValue, unit: impUnit }
+                        });
+                        break;
+                }
+            }
+
+            extractFromMaximumClause(clause, penalty) {
+                // Extract penalties from "maximum penalty" clauses
+                const yearMatch = clause.match(/(\d+)\s+(years?)/i);
+                if (yearMatch) {
+                    penalty.years = Math.max(penalty.years, parseInt(yearMatch[1]));
+                }
+
+                const monthMatch = clause.match(/(\d+)\s+(months?)/i);
+                if (monthMatch) {
+                    penalty.months = Math.max(penalty.months, parseInt(monthMatch[1]));
+                }
+
+                const unitMatch = clause.match(/(\d+)\s+penalty\s+units?/i);
+                if (unitMatch) {
+                    penalty.units = Math.max(penalty.units, parseInt(unitMatch[1]));
+                }
+
+                const fineMatch = clause.match(/\$?([\d,]+)/);
+                if (fineMatch && clause.toLowerCase().includes('fine')) {
+                    penalty.fine = Math.max(penalty.fine, parseInt(fineMatch[1].replace(/,/g, '')));
+                }
+            }
+
+            buildPenaltyText(penalty) {
+                const parts = [];
+                
+                if (penalty.life) {
+                    return 'Life imprisonment';
+                }
+                
+                if (penalty.years > 0) {
+                    parts.push(`${penalty.years} year${penalty.years > 1 ? 's' : ''} imprisonment`);
+                }
+                
+                if (penalty.months > 0 && penalty.years === 0) {
+                    parts.push(`${penalty.months} month${penalty.months > 1 ? 's' : ''} imprisonment`);
+                }
+                
+                if (penalty.units > 0) {
+                    parts.push(`${penalty.units} penalty unit${penalty.units > 1 ? 's' : ''}`);
+                }
+                
+                if (penalty.fine > 0) {
+                    parts.push(`$${penalty.fine.toLocaleString()} fine`);
+                }
+
+                // Handle alternatives
+                if (penalty.alternatives.length > 0) {
+                    const alt = penalty.alternatives[0];
+                    if (alt.type === 'alternative') {
+                        return `${alt.units} penalty units or ${alt.imprisonment.value} ${alt.imprisonment.unit} imprisonment`;
+                    }
+                }
+                
+                return parts.length > 0 ? parts.join(' or ') : 'Penalty not specified';
             }
 
             extractReferences(text, actName) {
@@ -628,63 +869,246 @@
                 this.table1Details = new Map();
                 this.table2Details = new Map();
                 this.strictlyIndictable = new Set();
+                this.specialCases = new Map();
             }
 
             parseSchedule1(scheduleText) {
-                console.log('Parsing Schedule 1...');
+                console.log('Parsing Schedule 1 with enhanced logic...');
                 
-                // Extract Table 1 sections
-                const table1Match = scheduleText.match(/Table 1.*?(?=Table 2|$)/s);
-                if (table1Match) {
-                    this.parseTable(table1Match[0], this.table1, this.table1Details, 'Table 1');
+                // CRITICAL: Extract tables by their exact text boundaries
+                const table1Start = scheduleText.indexOf('Table 1 - Indictable offences that are to be dealt with summarily unless prosecutor or person charged elects otherwise');
+                const table1End = scheduleText.indexOf('Table 2 - Indictable offences that are to be dealt with summarily unless prosecutor elects otherwise');
+                
+                if (table1Start !== -1 && table1End !== -1) {
+                    const table1Text = scheduleText.substring(table1Start, table1End);
+                    this.extractSectionsFromTable(table1Text, 'Table 1');
                 }
 
-                // Extract Table 2 sections
-                const table2Match = scheduleText.match(/Table 2.*?(?=Schedule 2|$)/s);
-                if (table2Match) {
-                    this.parseTable(table2Match[0], this.table2, this.table2Details, 'Table 2');
+                // Extract Table 2
+                const table2Start = table1End;
+                const table2End = scheduleText.indexOf('Schedule 2') !== -1 ? 
+                    scheduleText.indexOf('Schedule 2') : scheduleText.length;
+                
+                if (table2Start !== -1) {
+                    const table2Text = scheduleText.substring(table2Start, table2End);
+                    this.extractSectionsFromTable(table2Text, 'Table 2');
                 }
 
-                console.log(`Table 1: ${this.table1.size} entries, Table 2: ${this.table2.size} entries`);
+                console.log(`Enhanced parsing: Table 1: ${this.table1.size} entries, Table 2: ${this.table2.size} entries`);
+                this.logParsedSections();
             }
 
-            parseTable(tableText, targetSet, targetMap, tableName) {
-                // Extract section references from various patterns
+            extractSectionsFromTable(tableText, tableName) {
+                // Enhanced patterns to catch all section reference formats
                 const patterns = [
-                    /section (\d+[A-Z]*)/gi,
-                    /\b(\d+[A-Z]*)\s*\([^)]*\)/g,
-                    /under section (\d+[A-Z]*)/gi,
-                    /\b(\d+[A-Z]*)\s+of the Crimes Act/gi
+                    // Basic: "section 60", "under section 61E"
+                    /(?:under\s+)?section\s+(\d+[A-Z]*)/gi,
+                    
+                    // Multiple sections: "sections 33, 35, 35A"
+                    /sections\s+([\d\w,\s]+?)(?=\s+of|where|\.|$)/gi,
+                    
+                    // With subsections: "60 (2) or (2A)", "61E, 66C (1)"
+                    /(\d+[A-Z]*)\s*(?:\([^)]+\))?/g,
+                    
+                    // In offense descriptions: "An offence under section 61I"
+                    /An\s+offence\s+under\s+section\s+(\d+[A-Z]*)/gi,
+                    
+                    // Ranges: "154A, 154B, 154C" or "sections 178A-178C"
+                    /sections?\s+(\d+[A-Z]?)\s*[-–]\s*(\d+[A-Z]?)/gi
                 ];
 
-                patterns.forEach(pattern => {
+                const targetSet = tableName === 'Table 1' ? this.table1 : this.table2;
+                const targetMap = tableName === 'Table 1' ? this.table1Details : this.table2Details;
+
+                // Extract all section patterns
+                patterns.forEach((pattern, patternIndex) => {
                     let match;
+                    pattern.lastIndex = 0; // Reset regex
+                    
                     while ((match = pattern.exec(tableText)) !== null) {
-                        const section = match[1];
-                        targetSet.add(section);
-                        
-                        // Store context for this section
-                        const context = this.extractSectionContext(tableText, match.index);
-                        targetMap.set(section, {
-                            table: tableName,
-                            context: context,
-                            valueThreshold: this.extractValueThreshold(context)
-                        });
+                        if (patternIndex === 1) { // Multiple sections pattern
+                            // Handle comma-separated sections
+                            const sections = match[1].split(/[,\s]+/).filter(s => /\d/.test(s));
+                            sections.forEach(section => {
+                                const cleanSection = section.replace(/[^\d\w]/g, '');
+                                if (cleanSection) {
+                                    this.addSectionToTable(cleanSection, targetSet, targetMap, tableText, match.index, tableName);
+                                }
+                            });
+                        } else if (patternIndex === 4) { // Range pattern
+                            // Handle section ranges like "178A-178C"
+                            const startSection = match[1];
+                            const endSection = match[2];
+                            // Add logic to expand ranges
+                            this.expandSectionRange(startSection, endSection, targetSet, targetMap, tableText, match.index, tableName);
+                        } else {
+                            // Single section
+                            const section = match[1];
+                            if (section) {
+                                this.addSectionToTable(section, targetSet, targetMap, tableText, match.index, tableName);
+                            }
+                        }
                     }
                 });
 
-                // Special handling for range patterns like "60 (2) or (2A)"
-                const rangePattern = /(\d+[A-Z]*)\s*\(([^)]+)\)/g;
-                let rangeMatch;
-                while ((rangeMatch = rangePattern.exec(tableText)) !== null) {
-                    const baseSection = rangeMatch[1];
-                    const subsections = rangeMatch[2].split(/\s*(?:or|,)\s*/);
-                    
-                    subsections.forEach(sub => {
-                        const fullSection = `${baseSection}(${sub.trim()})`;
-                        targetSet.add(fullSection);
-                        targetSet.add(baseSection); // Also add base section
+                // Special handling for specific NSW patterns
+                this.handleSpecialNSWPatterns(tableText, targetSet, targetMap, tableName);
+            }
+
+            addSectionToTable(section, targetSet, targetMap, fullText, index, tableName) {
+                const cleanSection = section.trim();
+                targetSet.add(cleanSection);
+                
+                // Extract context and conditions
+                const context = this.extractSectionContext(fullText, index);
+                const valueThreshold = this.extractValueThreshold(context);
+                const conditions = this.extractConditions(context);
+                
+                targetMap.set(cleanSection, {
+                    table: tableName,
+                    context: context,
+                    valueThreshold: valueThreshold,
+                    conditions: conditions,
+                    originalText: fullText.substring(Math.max(0, index - 100), index + 100)
+                });
+
+                // Handle subsection variations
+                this.handleSubsectionVariations(cleanSection, targetSet, targetMap, context, tableName);
+            }
+
+            handleSubsectionVariations(baseSection, targetSet, targetMap, context, tableName) {
+                // Handle patterns like "60 (2) or (2A)" - add both forms
+                const subsectionMatch = context.match(new RegExp(`${baseSection}\\s*\\(([^)]+)\\)`, 'g'));
+                if (subsectionMatch) {
+                    subsectionMatch.forEach(match => {
+                        const fullMatch = match.match(/(\d+[A-Z]*)\s*\(([^)]+)\)/);
+                        if (fullMatch) {
+                            const base = fullMatch[1];
+                            const subs = fullMatch[2].split(/\s*(?:or|,)\s*/);
+                            
+                            subs.forEach(sub => {
+                                const fullSection = `${base}(${sub.trim()})`;
+                                targetSet.add(fullSection);
+                                targetSet.add(base); // Also add base section
+                            });
+                        }
                     });
+                }
+            }
+
+            expandSectionRange(start, end, targetSet, targetMap, fullText, index, tableName) {
+                // Expand ranges like 178A-178C to individual sections
+                const startNum = parseInt(start.replace(/[A-Z]/g, ''));
+                const endNum = parseInt(end.replace(/[A-Z]/g, ''));
+                const startLetter = start.match(/[A-Z]/)?.[0] || '';
+                const endLetter = end.match(/[A-Z]/)?.[0] || '';
+
+                if (startNum === endNum && startLetter && endLetter) {
+                    // Letter range within same number (e.g., 178A-178C)
+                    const startCode = startLetter.charCodeAt(0);
+                    const endCode = endLetter.charCodeAt(0);
+                    
+                    for (let code = startCode; code <= endCode; code++) {
+                        const section = startNum + String.fromCharCode(code);
+                        this.addSectionToTable(section, targetSet, targetMap, fullText, index, tableName);
+                    }
+                } else {
+                    // Number range
+                    for (let num = startNum; num <= endNum; num++) {
+                        this.addSectionToTable(num.toString(), targetSet, targetMap, fullText, index, tableName);
+                    }
+                }
+            }
+
+            handleSpecialNSWPatterns(tableText, targetSet, targetMap, tableName) {
+                // Handle NSW-specific patterns that might be missed by general regex
+                
+                // Pattern: "larceny" references without explicit section numbers
+                if (tableText.includes('larceny') || tableText.includes('Larceny')) {
+                    // Larceny is typically s.117 Crimes Act
+                    this.addSectionToTable('117', targetSet, targetMap, tableText, 0, tableName);
+                }
+
+                // Pattern: "fraud and related offences" 
+                if (tableText.includes('Fraud and related offences')) {
+                    // Part 4AA Crimes Act - sections 178A onwards
+                    const fraudSections = ['178A', '178B', '178BA', '178BB', '178C'];
+                    fraudSections.forEach(section => {
+                        this.addSectionToTable(section, targetSet, targetMap, tableText, 0, tableName);
+                    });
+                }
+
+                // Pattern: Value-based conditions for property offences
+                const valuePatterns = [
+                    /exceeding\s+\$(\d+(?:,\d{3})*)/gi,
+                    /not\s+exceed\s+\$(\d+(?:,\d{3})*)/gi,
+                    /does\s+not\s+exceed\s+\$(\d+(?:,\d{3})*)/gi
+                ];
+
+                valuePatterns.forEach(pattern => {
+                    let match;
+                    while ((match = pattern.exec(tableText)) !== null) {
+                        const threshold = parseInt(match[1].replace(/,/g, ''));
+                        // Store this threshold for property offense classification
+                        if (threshold === 5000) {
+                            this.specialCases.set('property_threshold', threshold);
+                        }
+                    }
+                });
+            }
+
+            extractConditions(context) {
+                const conditions = [];
+                
+                // Value conditions
+                if (context.includes('exceeding')) {
+                    const match = context.match(/exceeding\s+\$(\d+(?:,\d{3})*)/i);
+                    if (match) {
+                        conditions.push({
+                            type: 'value_exceeds',
+                            amount: parseInt(match[1].replace(/,/g, ''))
+                        });
+                    }
+                }
+
+                if (context.includes('does not exceed')) {
+                    const match = context.match(/does\s+not\s+exceed\s+\$(\d+(?:,\d{3})*)/i);
+                    if (match) {
+                        conditions.push({
+                            type: 'value_under',
+                            amount: parseInt(match[1].replace(/,/g, ''))
+                        });
+                    }
+                }
+
+                // Age conditions
+                if (context.includes('14 years')) {
+                    conditions.push({
+                        type: 'victim_age',
+                        minimum: 14
+                    });
+                }
+
+                // Death exclusions
+                if (context.includes('death was occasioned')) {
+                    conditions.push({
+                        type: 'exclude_death'
+                    });
+                }
+
+                return conditions;
+            }
+
+            logParsedSections() {
+                console.log('Table 1 sections:', Array.from(this.table1).sort());
+                console.log('Table 2 sections:', Array.from(this.table2).sort());
+                
+                // Log some examples with conditions
+                for (const [section, details] of this.table1Details) {
+                    if (details.conditions.length > 0) {
+                        console.log(`Table 1 - Section ${section}:`, details.conditions);
+                        break; // Just show one example
+                    }
                 }
             }
 
@@ -699,55 +1123,183 @@
                 return valueMatch ? parseInt(valueMatch[1].replace(/,/g, '')) : null;
             }
 
-            classifyOffence(sectionNumber, penaltyData, chargeValue = 0) {
-                // Clean section number for comparison
+            classifyOffence(sectionNumber, penaltyData, chargeValue = null, chargeContext = {}) {
+                // STEP 1: Clean section number for comparison
                 const cleanSection = sectionNumber.replace(/^s\.?/i, '').trim();
                 
-                // Check Table 1 (both parties can elect)
+                console.log(`Classifying section ${cleanSection}, value: ${chargeValue}, penalty:`, penaltyData);
+                
+                // STEP 2: Check Table 1 first (dual election)
                 if (this.table1.has(cleanSection)) {
                     const details = this.table1Details.get(cleanSection);
-                    if (details && details.valueThreshold && chargeValue < details.valueThreshold) {
-                        return {
-                            classification: 'Table 2',
-                            court: 'Local Court',
-                            election: 'Prosecution election only',
-                            note: `Value under $${details.valueThreshold.toLocaleString()}`
-                        };
+                    
+                    // Check for value-based classification changes
+                    if (details && details.conditions) {
+                        for (const condition of details.conditions) {
+                            if (condition.type === 'value_under' && chargeValue !== null) {
+                                if (chargeValue < condition.amount) {
+                                    return {
+                                        classification: 'Table 2',
+                                        court: 'Local Court (unless prosecution elects)',
+                                        election: 'Only prosecution can elect District Court',
+                                        reason: `Value $${chargeValue.toLocaleString()} is under Table 1 threshold of $${condition.amount.toLocaleString()}`,
+                                        originalTable: 'Table 1'
+                                    };
+                                }
+                            }
+                            
+                            if (condition.type === 'value_exceeds' && chargeValue !== null) {
+                                if (chargeValue < condition.amount) {
+                                    return {
+                                        classification: 'Summary Only',
+                                        court: 'Local Court',
+                                        election: 'No election available',
+                                        reason: `Value $${chargeValue.toLocaleString()} does not meet Table 1 minimum of $${condition.amount.toLocaleString()}`
+                                    };
+                                }
+                            }
+                            
+                            // Handle death exclusions
+                            if (condition.type === 'exclude_death' && chargeContext.death === true) {
+                                return {
+                                    classification: 'Strictly Indictable',
+                                    court: 'District/Supreme Court',
+                                    election: 'Must proceed on indictment',
+                                    reason: 'Death was occasioned - excluded from Table 1'
+                                };
+                            }
+                        }
                     }
+                    
                     return {
                         classification: 'Table 1',
                         court: 'Local Court (unless elected)',
-                        election: 'Either party can elect for indictment'
+                        election: 'Either prosecution or defendant can elect District Court',
+                        briefService: '6 weeks from first appearance',
+                        electionPeriod: '28 days'
                     };
                 }
 
-                // Check Table 2 (prosecution election only)
+                // STEP 3: Check Table 2 (prosecution election only)
                 if (this.table2.has(cleanSection)) {
+                    const details = this.table2Details.get(cleanSection);
+                    
+                    // Check Table 2 specific conditions
+                    if (details && details.conditions) {
+                        for (const condition of details.conditions) {
+                            if (condition.type === 'value_exceeds' && chargeValue !== null) {
+                                if (chargeValue >= condition.amount) {
+                                    return {
+                                        classification: 'Table 1',
+                                        court: 'Local Court (unless elected)',
+                                        election: 'Either party can elect District Court',
+                                        reason: `Value $${chargeValue.toLocaleString()} exceeds Table 2 threshold - promoted to Table 1`
+                                    };
+                                }
+                            }
+                        }
+                    }
+                    
                     return {
                         classification: 'Table 2',
                         court: 'Local Court (unless prosecution elects)',
-                        election: 'Prosecution can elect for indictment'
+                        election: 'Only prosecution can elect District Court',
+                        briefService: '6 weeks from first appearance if defended'
                     };
                 }
 
-                // Check for strictly indictable based on penalty
+                // STEP 4: Not in Schedule 1 tables - use penalty analysis
                 if (penaltyData) {
-                    const maxPenalty = this.calculateMaxPenalty(penaltyData);
-                    if (maxPenalty > 5) { // More than 5 years typically indictable only
+                    const maxPenaltyYears = this.calculateMaxPenalty(penaltyData);
+                    
+                    // Life imprisonment = strictly indictable
+                    if (penaltyData.life) {
                         return {
                             classification: 'Strictly Indictable',
-                            court: 'District/Supreme Court',
-                            election: 'Must proceed on indictment'
+                            court: 'Supreme Court (life imprisonment)',
+                            election: 'Must proceed on indictment',
+                            reason: 'Life imprisonment penalty'
                         };
                     }
+                    
+                    // More than 2 years max penalty = strictly indictable
+                    if (maxPenaltyYears > 2) {
+                        const court = maxPenaltyYears >= 7 ? 'District/Supreme Court' : 'District Court';
+                        return {
+                            classification: 'Strictly Indictable',
+                            court: court,
+                            election: 'Must proceed on indictment',
+                            reason: `Maximum penalty of ${maxPenaltyYears} years exceeds 2-year summary limit`,
+                            committalRequired: true
+                        };
+                    }
+                    
+                    // 2 years or less = summary only
+                    return {
+                        classification: 'Summary Only',
+                        court: 'Local Court',
+                        election: 'No election available',
+                        reason: `Maximum penalty of ${maxPenaltyYears} years ≤ 2-year summary limit`
+                    };
                 }
 
-                // Default to summary for unknown offences with low penalties
+                // STEP 5: No penalty data available - conservative approach
                 return {
-                    classification: 'Summary',
-                    court: 'Local Court',
-                    election: 'Summary jurisdiction only'
+                    classification: 'Unknown - Analysis Required',
+                    court: 'To be determined',
+                    election: 'Requires further analysis',
+                    reason: 'Section not in Schedule 1 and no penalty data available',
+                    action: 'Check penalty provisions in Crimes Act'
                 };
+            }
+
+            calculateMaxPenalty(penalty) {
+                if (!penalty) return 0;
+                
+                let totalYears = 0;
+                
+                if (penalty.life) return 999; // Life imprisonment
+                if (penalty.years) totalYears += penalty.years;
+                if (penalty.months) totalYears += penalty.months / 12;
+                
+                // Convert penalty units to equivalent imprisonment (rough approximation)
+                if (penalty.units && !totalYears) {
+                    // Generally, higher penalty units indicate more serious offenses
+                    // This is a rough guide - actual conversion varies
+                    if (penalty.units > 200) totalYears = 2;
+                    else if (penalty.units > 100) totalYears = 1;
+                    else if (penalty.units > 50) totalYears = 0.5;
+                }
+                
+                return totalYears;
+            }
+
+            // Validation method for known test cases
+            validateClassification() {
+                const testCases = [
+                    // Table 1 tests
+                    { section: '61I', expected: 'Table 1', description: 'Sexual assault - Table 1' },
+                    { section: '60', expected: 'Table 1', description: 'Assault police - Table 1' },
+                    
+                    // Table 2 tests  
+                    { section: '117', expected: 'Table 2', value: 1000, description: 'Larceny under $5000' },
+                    { section: '61', expected: 'Table 2', description: 'Common assault - Table 2' },
+                    
+                    // Value threshold tests
+                    { section: '117', expected: 'Table 1', value: 10000, description: 'Larceny over $5000' },
+                    
+                    // Penalty-based tests
+                    { section: '19A', expected: 'Strictly Indictable', description: 'Murder (life imprisonment)' }
+                ];
+
+                console.log('Running classification validation tests...');
+                testCases.forEach(test => {
+                    const mockPenalty = test.section === '19A' ? { life: true } : { years: 1 };
+                    const result = this.classifyOffence(test.section, mockPenalty, test.value);
+                    
+                    const passed = result.classification.includes(test.expected);
+                    console.log(`${passed ? '✓' : '✗'} ${test.description}: Expected ${test.expected}, got ${result.classification}`);
+                });
             }
 
             calculateMaxPenalty(penalty) {
@@ -975,40 +1527,254 @@
                 });
             }
 
-            generateWorkflow(chargeInfo, plea, court = 'auto') {
-                const classification = chargeInfo.classification.toLowerCase().replace(' ', '');
-                const pleaKey = plea === 'guilty' ? 'guilty' : 'not_guilty';
+            generateWorkflow(chargeInfo, plea, electionMade = false, chargeValue = null) {
+                console.log('Generating workflow for:', chargeInfo.classification, plea, electionMade ? 'election made' : 'no election');
                 
-                let templateKey;
-                if (classification.includes('table1')) {
-                    templateKey = 'table1';
-                } else if (classification.includes('table2')) {
-                    templateKey = 'table2';
-                } else if (classification.includes('indictable')) {
-                    templateKey = 'indictable';
-                } else {
-                    templateKey = 'summary';
-                }
+                // Determine workflow type based on classification
+                const workflowType = this.determineWorkflowType(chargeInfo.classification);
+                
+                // Generate base steps
+                let steps = this.generateStepsByClassification(workflowType, plea, electionMade, chargeInfo);
+                
+                // Calculate deadlines
+                steps = steps.map(step => ({
+                    ...step,
+                    deadline: this.calculateDeadline(step.deadline, step.baseDate || 'first_appearance'),
+                    completed: false
+                }));
 
-                const template = this.procedureTemplates.get(templateKey);
-                if (!template || !template[pleaKey]) {
-                    return this.generateFallbackWorkflow(chargeInfo, plea);
-                }
+                // Generate documents and deadlines
+                const documents = this.generateDocumentList(workflowType, plea, electionMade, chargeInfo);
+                const keyDeadlines = this.calculateKeyDeadlines(chargeInfo.classification, plea, electionMade);
+                const practiceNotes = this.generatePracticeNotes(chargeInfo, plea, electionMade, chargeValue);
 
-                const steps = template[pleaKey];
                 const workflow = {
                     classification: chargeInfo.classification,
                     plea: plea,
                     court: chargeInfo.court,
-                    steps: steps.map(step => ({
-                        ...step,
-                        deadline: this.calculateDeadline(step.deadline)
-                    })),
-                    documents: this.generateDocumentList(templateKey, pleaKey),
-                    notes: this.generatePracticeNotes(chargeInfo)
+                    electionMade: electionMade,
+                    electionAvailable: this.isElectionAvailable(chargeInfo.classification),
+                    steps: steps,
+                    documents: documents,
+                    keyDeadlines: keyDeadlines,
+                    briefService: this.calculateBriefService(chargeInfo.classification, plea, electionMade),
+                    notes: practiceNotes,
+                    nextActions: this.generateNextActions(steps)
                 };
 
                 return workflow;
+            }
+
+            determineWorkflowType(classification) {
+                if (classification.includes('Table 1')) return 'table1';
+                if (classification.includes('Table 2')) return 'table2';
+                if (classification.includes('Strictly Indictable')) return 'strictly_indictable';
+                if (classification.includes('Summary')) return 'summary';
+                return 'unknown';
+            }
+
+            generateStepsByClassification(workflowType, plea, electionMade, chargeInfo) {
+                const baseSteps = {
+                    table1: {
+                        guilty: {
+                            no_election: [
+                                { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate, confirm identity and charge' },
+                                { step: 2, task: 'Election period expires (no election made)', deadline: '+28 days', mandatory: true, description: '28-day election period for defendant or prosecution expires' },
+                                { step: 3, task: 'Enter guilty plea', deadline: 'same_day', mandatory: true, description: 'Enter plea after election period or if no election intended' },
+                                { step: 4, task: 'Facts tendered by prosecution', deadline: 'same_day', mandatory: true, description: 'Prosecution reads agreed facts or provides evidence' },
+                                { step: 5, task: 'Submissions on penalty', deadline: 'same_day', mandatory: true, description: 'Defence submissions on penalty, character references' },
+                                { step: 6, task: 'Sentence imposed by Local Court', deadline: 'same_day', mandatory: true, description: 'Magistrate imposes sentence within Local Court jurisdiction' }
+                            ],
+                            election_made: [
+                                { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate, confirm identity and charge' },
+                                { step: 2, task: 'Election made for District Court', deadline: '+28 days', mandatory: true, description: 'Either prosecution or defendant elects District Court' },
+                                { step: 3, task: 'Committal for sentence', deadline: '+6 weeks', mandatory: true, description: 'Matter committed to District Court for sentence' },
+                                { step: 4, task: 'First appearance District Court', deadline: '+10 weeks', mandatory: true, description: 'Arraignment and plea in District Court' },
+                                { step: 5, task: 'Sentence in District Court', deadline: 'same_day', mandatory: true, description: 'District Court Judge imposes sentence' }
+                            ]
+                        },
+                        not_guilty: {
+                            no_election: [
+                                { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate, confirm charge and election rights' },
+                                { step: 2, task: 'Election period (28 days)', deadline: '+28 days', mandatory: false, description: 'Period for either party to elect District Court - no election means Local Court' },
+                                { step: 3, task: 'Enter not guilty plea', deadline: '+35 days', mandatory: true, description: 'Enter plea after election period expires' },
+                                { step: 4, task: 'Prosecution serves brief of evidence', deadline: '+42 days', mandatory: true, description: 'Full brief served within 6 weeks of first mention' },
+                                { step: 5, task: 'Pre-trial conference (if required)', deadline: '+10 weeks', mandatory: false, description: 'Case conference to discuss issues and possible resolution' },
+                                { step: 6, task: 'Local Court hearing/trial', deadline: '+16 weeks', mandatory: true, description: 'Defended hearing before Magistrate' },
+                                { step: 7, task: 'Verdict and sentence (if guilty)', deadline: 'same_day', mandatory: true, description: 'Magistrate determines guilt and imposes sentence if convicted' }
+                            ],
+                            election_made: [
+                                { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate, confirm charge and election rights' },
+                                { step: 2, task: 'Election made for District Court', deadline: '+28 days', mandatory: true, description: 'Either prosecution or defendant elects District Court jurisdiction' },
+                                { step: 3, task: 'Brief of evidence served', deadline: '+42 days', mandatory: true, description: 'Full prosecution brief including all witness statements' },
+                                { step: 4, task: 'Case conference (if applicable)', deadline: '+8 weeks', mandatory: false, description: 'Mandatory case conference for some indictable matters' },
+                                { step: 5, task: 'Committal proceedings', deadline: '+12 weeks', mandatory: true, description: 'Committal hearing to determine if case proceeds to trial' },
+                                { step: 6, task: 'Committal for trial (if case to answer)', deadline: 'same_day', mandatory: true, description: 'If prima facie case, committed for trial in District Court' },
+                                { step: 7, task: 'Arraignment in District Court', deadline: '+16 weeks', mandatory: true, description: 'Formal arraignment and plea before District Court Judge' },
+                                { step: 8, task: 'Trial preparation and mentions', deadline: '+20 weeks', mandatory: true, description: 'Pre-trial case management and preparation' },
+                                { step: 9, task: 'District Court trial', deadline: '+24 weeks', mandatory: true, description: 'Trial before Judge and jury (or Judge alone if elected)' }
+                            ]
+                        }
+                    },
+                    
+                    table2: {
+                        guilty: {
+                            no_election: [
+                                { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate, prosecution considers election' },
+                                { step: 2, task: 'Prosecution election period expires', deadline: '+28 days', mandatory: true, description: 'Only prosecution can elect - if no election, stays in Local Court' },
+                                { step: 3, task: 'Enter guilty plea', deadline: 'same_day', mandatory: true, description: 'Enter plea in Local Court after election period' },
+                                { step: 4, task: 'Sentence in Local Court', deadline: 'same_day', mandatory: true, description: 'Magistrate imposes sentence within summary jurisdiction' }
+                            ],
+                            election_made: [
+                                { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate' },
+                                { step: 2, task: 'Prosecution elects District Court', deadline: '+28 days', mandatory: true, description: 'Only prosecution can elect for Table 2 offences' },
+                                { step: 3, task: 'Committal for sentence', deadline: '+6 weeks', mandatory: true, description: 'Committed to District Court for sentence' },
+                                { step: 4, task: 'Sentence in District Court', deadline: '+10 weeks', mandatory: true, description: 'District Court Judge imposes sentence' }
+                            ]
+                        },
+                        not_guilty: {
+                            no_election: [
+                                { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate, prosecution considers election' },
+                                { step: 2, task: 'Prosecution election period', deadline: '+28 days', mandatory: true, description: 'Only prosecution can elect District Court for Table 2' },
+                                { step: 3, task: 'Enter not guilty plea', deadline: '+35 days', mandatory: true, description: 'Enter plea after prosecution election period' },
+                                { step: 4, task: 'Brief of evidence served (if defended)', deadline: '+42 days', mandatory: true, description: 'Brief served if matter defended' },
+                                { step: 5, task: 'Local Court hearing', deadline: '+12 weeks', mandatory: true, description: 'Defended hearing in Local Court' },
+                                { step: 6, task: 'Verdict and sentence', deadline: 'same_day', mandatory: true, description: 'Magistrate determines outcome' }
+                            ],
+                            election_made: [
+                                { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate' },
+                                { step: 2, task: 'Prosecution elects District Court', deadline: '+28 days', mandatory: true, description: 'Prosecution elects for indictable procedure' },
+                                { step: 3, task: 'Brief of evidence served', deadline: '+42 days', mandatory: true, description: 'Full brief for committal proceedings' },
+                                { step: 4, task: 'Committal proceedings', deadline: '+12 weeks', mandatory: true, description: 'Committal hearing before Magistrate' },
+                                { step: 5, task: 'Trial in District Court (if committed)', deadline: '+20 weeks', mandatory: true, description: 'Trial before District Court if committed' }
+                            ]
+                        }
+                    },
+
+                    strictly_indictable: {
+                        any: [
+                            { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'First mention - cannot be dealt with summarily' },
+                            { step: 2, task: 'Brief of evidence served', deadline: '+42 days', mandatory: true, description: 'Full brief must be served for committal' },
+                            { step: 3, task: 'Case conference (if required)', deadline: '+8 weeks', mandatory: false, description: 'May be required for complex matters' },
+                            { step: 4, task: 'Committal proceedings', deadline: '+12 weeks', mandatory: true, description: 'Committal hearing before Magistrate - mandatory' },
+                            { step: 5, task: 'Committal determination', deadline: 'same_day', mandatory: true, description: 'Magistrate determines if case proceeds to higher court' },
+                            { step: 6, task: 'Arraignment in higher court', deadline: '+16 weeks', mandatory: true, description: 'Arraignment in District or Supreme Court' },
+                            { step: 7, task: 'Trial preparation', deadline: '+20 weeks', mandatory: true, description: 'Pre-trial case management and disclosure' },
+                            { step: 8, task: 'Trial in higher court', deadline: '+26 weeks', mandatory: true, description: 'Trial before Judge (and jury for indictable matters)' }
+                        ]
+                    },
+
+                    summary: {
+                        any: [
+                            { step: 1, task: 'First appearance in Local Court', deadline: 'court_date', mandatory: true, description: 'Appear before Magistrate for summary matter' },
+                            { step: 2, task: 'Enter plea', deadline: 'same_day', mandatory: true, description: 'Enter guilty or not guilty plea' },
+                            { step: 3, task: 'Brief on request (if not guilty)', deadline: '+28 days', mandatory: false, description: 'Prosecution brief served if matter defended' },
+                            { step: 4, task: 'Hearing (if not guilty)', deadline: '+8 weeks', mandatory: false, description: 'Defended hearing if not guilty plea entered' },
+                            { step: 5, task: 'Sentence (if guilty/convicted)', deadline: 'same_day', mandatory: true, description: 'Sentence imposed by Magistrate' }
+                        ]
+                    }
+                };
+
+                const pathKey = plea === 'guilty' ? 'guilty' : 'not_guilty';
+                const electionKey = electionMade ? 'election_made' : 'no_election';
+                
+                if (workflowType === 'strictly_indictable' || workflowType === 'summary') {
+                    return baseSteps[workflowType]['any'];
+                }
+
+                return baseSteps[workflowType]?.[pathKey]?.[electionKey] || baseSteps['summary']['any'];
+            }
+
+            calculateBriefService(classification, plea, electionMade) {
+                if (plea === 'guilty') {
+                    return 'Brief not required for guilty pleas';
+                }
+
+                const timeframes = {
+                    'Summary Only': 'Brief served on request or court direction',
+                    'Table 1': '6 weeks from first appearance (full brief if election made)',
+                    'Table 2': '6 weeks from first appearance (full brief if prosecution elects)',
+                    'Strictly Indictable': '6 weeks from first appearance (full brief required for committal)'
+                };
+
+                for (const [key, timeframe] of Object.entries(timeframes)) {
+                    if (classification.includes(key)) {
+                        return timeframe;
+                    }
+                }
+
+                return '6 weeks from first appearance (standard rule)';
+            }
+
+            isElectionAvailable(classification) {
+                if (classification.includes('Table 1')) {
+                    return 'Either prosecution or defendant can elect District Court';
+                }
+                if (classification.includes('Table 2')) {
+                    return 'Only prosecution can elect District Court';
+                }
+                if (classification.includes('Strictly Indictable')) {
+                    return 'No election - must proceed on indictment';
+                }
+                return 'No election available - summary jurisdiction only';
+            }
+
+            calculateKeyDeadlines(classification, plea, electionMade) {
+                const now = new Date();
+                const deadlines = {};
+
+                // Election period (if applicable)
+                if (classification.includes('Table 1') || classification.includes('Table 2')) {
+                    const electionDate = new Date(now);
+                    electionDate.setDate(electionDate.getDate() + 28);
+                    deadlines.election = {
+                        date: electionDate.toLocaleDateString('en-AU'),
+                        description: 'Last date for election to District Court',
+                        daysFromNow: 28
+                    };
+                }
+
+                // Brief service
+                if (plea === 'not_guilty' || plea === 'not_entered') {
+                    const briefDate = new Date(now);
+                    briefDate.setDate(briefDate.getDate() + 42); // 6 weeks
+                    deadlines.brief = {
+                        date: briefDate.toLocaleDateString('en-AU'),
+                        description: 'Prosecution must serve brief of evidence',
+                        daysFromNow: 42
+                    };
+                }
+
+                // Committal hearing (for indictable matters)
+                if (classification.includes('Indictable') || electionMade) {
+                    const committalDate = new Date(now);
+                    committalDate.setDate(committalDate.getDate() + 84); // 12 weeks
+                    deadlines.committal = {
+                        date: committalDate.toLocaleDateString('en-AU'),
+                        description: 'Committal proceedings',
+                        daysFromNow: 84
+                    };
+                }
+
+                return deadlines;
+            }
+
+            generateNextActions(steps) {
+                const pendingSteps = steps.filter(step => !step.completed);
+                if (pendingSteps.length === 0) return ['Matter complete'];
+                
+                const nextStep = pendingSteps[0];
+                const actions = [`${nextStep.task} - ${nextStep.description}`];
+                
+                if (nextStep.deadline && nextStep.deadline.daysFromNow !== null) {
+                    if (nextStep.deadline.daysFromNow <= 7) {
+                        actions.push('⚠️ URGENT: Due within 7 days');
+                    } else if (nextStep.deadline.daysFromNow <= 14) {
+                        actions.push('⚠️ Due within 2 weeks');
+                    }
+                }
+                
+                return actions;
             }
 
             calculateDeadline(deadlineText) {
@@ -1241,6 +2007,11 @@
                 return;
             }
 
+            updateStatus('Analyzing charge...', 'loading');
+
+            // Extract potential charge value from query
+            const chargeValue = extractChargeValue(query);
+            
             // Search for the section
             const results = legislativeSystem.search.search(query);
             
@@ -1248,7 +2019,7 @@
                 displayResults({
                     query: query,
                     found: false,
-                    message: 'No matching sections found. The charge may be summary only or from legislation not yet loaded.'
+                    message: 'No matching sections found. The charge may be summary only, from legislation not yet loaded, or require manual analysis.'
                 });
                 return;
             }
@@ -1261,17 +2032,22 @@
                 displayResults({
                     query: query,
                     found: false,
-                    message: 'Section found but details not available.'
+                    message: 'Section found but details not available. Check section exists in loaded legislation.'
                 });
                 return;
             }
 
-            // Classify the offence
+            console.log('Analyzing section:', sectionNumber, 'with value:', chargeValue);
+
+            // Enhanced classification with value consideration
             const classification = legislativeSystem.classifier.classifyOffence(
                 sectionNumber, 
-                sectionData.penalty
+                sectionData.penalty,
+                chargeValue,
+                { death: query.toLowerCase().includes('death') }
             );
 
+            // Build comprehensive charge information
             const chargeInfo = {
                 section: sectionNumber,
                 title: sectionData.title,
@@ -1280,14 +2056,195 @@
                 classification: classification.classification,
                 court: classification.court,
                 election: classification.election,
-                note: classification.note
+                reason: classification.reason,
+                briefService: classification.briefService,
+                electionPeriod: classification.electionPeriod,
+                committalRequired: classification.committalRequired,
+                note: classification.note,
+                chargeValue: chargeValue
             };
+
+            // Generate cross-references and related information
+            const crossReferences = generateCrossReferences(chargeInfo);
 
             displayResults({
                 query: query,
                 found: true,
                 chargeInfo: chargeInfo,
-                relatedSections: results.slice(1, 4)
+                relatedSections: results.slice(1, 4),
+                crossReferences: crossReferences
+            });
+
+            updateStatus('Analysis complete', 'success');
+        }
+
+        function extractChargeValue(query) {
+            // Extract dollar amounts from query
+            const valuePattern = /\$?([\d,]+)(?:\.\d{2})?/g;
+            const matches = query.match(valuePattern);
+            
+            if (matches && matches.length > 0) {
+                // Take the largest value found
+                const values = matches.map(match => 
+                    parseInt(match.replace(/[$,]/g, ''))
+                ).filter(val => !isNaN(val) && val > 0);
+                
+                return values.length > 0 ? Math.max(...values) : null;
+            }
+            
+            return null;
+        }
+
+        function generateCrossReferences(chargeInfo) {
+            const references = {
+                bail: [],
+                evidence: [],
+                procedure: [],
+                sentencing: [],
+                jurisdiction: []
+            };
+
+            // Bail Act references
+            if (chargeInfo.penalty) {
+                const penaltyYears = legislativeSystem.classifier.calculateMaxPenalty(chargeInfo.penalty);
+                
+                if (penaltyYears >= 3) {
+                    references.bail.push('Show cause provision may apply - Bail Act 2013 s.16B');
+                }
+                if (chargeInfo.section === '19A') {
+                    references.bail.push('Exceptional circumstances required - Bail Act 2013 s.16BA');
+                }
+            }
+
+            // Evidence Act references
+            if (chargeInfo.title && chargeInfo.title.toLowerCase().includes('sexual')) {
+                references.evidence.push('Special provisions apply - Evidence Act 1995 Part 2 Division 1');
+                references.evidence.push('Complainant evidence provisions - Criminal Procedure Act Chapter 6 Part 5');
+            }
+            
+            if (chargeInfo.title && chargeInfo.title.toLowerCase().includes('domestic')) {
+                references.evidence.push('Domestic violence evidence provisions - Criminal Procedure Act Part 4B');
+            }
+
+            // Procedure references
+            references.procedure.push(`Classification: ${chargeInfo.classification}`);
+            
+            if (chargeInfo.election && !chargeInfo.election.includes('No election')) {
+                references.procedure.push(`Election rights: ${chargeInfo.election}`);
+                references.procedure.push('Election procedures - Criminal Procedure Act ss.260-264');
+            }
+
+            if (chargeInfo.briefService) {
+                references.procedure.push(`Brief service: ${chargeInfo.briefService}`);
+            }
+
+            // Jurisdiction references
+            references.jurisdiction.push(`Primary court: ${chargeInfo.court}`);
+            
+            if (chargeInfo.classification.includes('Table')) {
+                references.jurisdiction.push('Summary disposal provisions - Criminal Procedure Act Chapter 5');
+            }
+
+            // Sentencing references
+            if (chargeInfo.penalty) {
+                const penaltyYears = legislativeSystem.classifier.calculateMaxPenalty(chargeInfo.penalty);
+                
+                if (penaltyYears >= 5) {
+                    references.sentencing.push('Standard non-parole period may apply - Crimes (Sentencing Procedure) Act');
+                }
+                
+                if (chargeInfo.section && chargeInfo.section.startsWith('61')) {
+                    references.sentencing.push('Sexual offence sentencing provisions may apply');
+                }
+            }
+
+            return references;
+        }
+
+        // Enhanced workflow generation function
+        function generateWorkflow() {
+            if (!window.currentChargeInfo) {
+                alert('Please analyze a charge first');
+                return;
+            }
+
+            const plea = document.getElementById('pleaSelect').value;
+            const court = document.getElementById('courtSelect').value;
+            const electionMade = prompt('Has an election been made for District Court? (yes/no)', 'no')?.toLowerCase() === 'yes';
+            
+            updateStatus('Generating procedural workflow...', 'loading');
+
+            const workflow = legislativeSystem.workflow.generateWorkflow(
+                window.currentChargeInfo, 
+                plea, 
+                electionMade,
+                window.currentChargeInfo.chargeValue
+            );
+
+            displayWorkflow(workflow);
+            
+            updateStatus('Workflow generated successfully', 'success');
+        }
+
+        // System validation function
+        function validateSystem() {
+            console.log('🔍 Running NSW Criminal Law Intelligence System Validation...');
+            
+            if (legislativeSystem.loaded) {
+                // Run Schedule 1 classification tests
+                legislativeSystem.classifier.validateClassification();
+                
+                // Test penalty extraction
+                testPenaltyExtraction();
+                
+                // Test workflow generation
+                testWorkflowGeneration();
+                
+                console.log('✅ System validation complete - check console for results');
+                updateStatus('System validation complete - check console for detailed results', 'success');
+            } else {
+                console.log('❌ Cannot validate - legislation not loaded');
+                updateStatus('Load legislation files first to run validation', 'warning');
+            }
+        }
+
+        function testPenaltyExtraction() {
+            console.log('\n📋 Testing penalty extraction...');
+            
+            const testCases = [
+                { text: 'imprisonment for 5 years', expected: { years: 5 } },
+                { text: '10 penalty units or imprisonment for 6 months', expected: { units: 10, months: 6 } },
+                { text: 'life imprisonment', expected: { life: true } },
+                { text: 'fine not exceeding $5,500', expected: { fine: 5500 } },
+                { text: 'maximum penalty: 2 years imprisonment', expected: { years: 2 } }
+            ];
+            
+            testCases.forEach(test => {
+                const result = legislativeSystem.processor.extractPenalty(test.text);
+                const passed = result && Object.keys(test.expected).every(key => result[key] === test.expected[key]);
+                console.log(`${passed ? '✓' : '✗'} Penalty extraction: "${test.text}" - Expected:`, test.expected, 'Got:', result);
+            });
+        }
+
+        function testWorkflowGeneration() {
+            console.log('\n⚖️ Testing workflow generation...');
+            
+            const mockCharge = {
+                section: '61I',
+                title: 'Sexual assault',
+                classification: 'Table 1',
+                court: 'Local Court (unless elected)',
+                penalty: { years: 5 }
+            };
+            
+            const workflows = [
+                { plea: 'guilty', election: false, description: 'Table 1 guilty plea, no election' },
+                { plea: 'not_guilty', election: true, description: 'Table 1 not guilty plea, election made' }
+            ];
+            
+            workflows.forEach(test => {
+                const workflow = legislativeSystem.workflow.generateWorkflow(mockCharge, test.plea, test.election);
+                console.log(`✓ Workflow generated for: ${test.description} - ${workflow.steps.length} steps`);
             });
         }
 
@@ -1310,31 +2267,59 @@
             const charge = results.chargeInfo;
             const classificationClass = charge.classification.toLowerCase().replace(' ', '');
             
+            let crossRefHtml = '';
+            if (results.crossReferences) {
+                crossRefHtml = `
+                    <div class="cross-references">
+                        <h4>Cross-References & Related Provisions</h4>
+                        ${Object.entries(results.crossReferences).map(([category, refs]) => 
+                            refs.length > 0 ? `
+                                <div class="reference-category">
+                                    <strong>${category.charAt(0).toUpperCase() + category.slice(1)}:</strong>
+                                    <ul>${refs.map(ref => `<li>${ref}</li>`).join('')}</ul>
+                                </div>
+                            ` : ''
+                        ).join('')}
+                    </div>
+                `;
+            }
+
             resultsContent.innerHTML = `
                 <div class="charge-summary">
                     <h3>${charge.act} - Section ${charge.section}</h3>
                     <h4>${charge.title}</h4>
                     
                     <div class="classification ${classificationClass}">${charge.classification}</div>
+                    ${charge.reason ? `<p class="classification-reason"><strong>Reason:</strong> ${charge.reason}</p>` : ''}
+                    ${charge.chargeValue ? `<p class="charge-value"><strong>Charge Value:</strong> $${charge.chargeValue.toLocaleString()}</p>` : ''}
                     
                     <div class="penalty-info">
                         <h4>Maximum Penalty</h4>
-                        <p>${charge.penalty ? legislativeSystem.workflow.formatPenalty(charge.penalty) : 'Not specified'}</p>
+                        <p>${charge.penalty ? charge.penalty.text || legislativeSystem.workflow.formatPenalty(charge.penalty) : 'Not specified'}</p>
                     </div>
                     
                     <div class="jurisdiction-info">
-                        <h4>Jurisdiction</h4>
+                        <h4>Jurisdiction & Procedure</h4>
                         <p><strong>Court:</strong> ${charge.court}</p>
                         <p><strong>Election Rights:</strong> ${charge.election}</p>
-                        ${charge.note ? `<p><strong>Note:</strong> ${charge.note}</p>` : ''}
+                        ${charge.briefService ? `<p><strong>Brief Service:</strong> ${charge.briefService}</p>` : ''}
+                        ${charge.electionPeriod ? `<p><strong>Election Period:</strong> ${charge.electionPeriod}</p>` : ''}
+                        ${charge.committalRequired ? `<p><strong>Committal:</strong> Required</p>` : ''}
+                        ${charge.note ? `<p class="status-warning"><strong>Note:</strong> ${charge.note}</p>` : ''}
                     </div>
+                    
+                    ${crossRefHtml}
                     
                     ${results.relatedSections.length > 0 ? `
                         <div class="related-sections">
-                            <h4>Related Sections</h4>
+                            <h4>Related Sections Found</h4>
                             <p>${results.relatedSections.join(', ')}</p>
                         </div>
                     ` : ''}
+                    
+                    <div class="analysis-info">
+                        <p><small><em>Analysis based on NSW Criminal Procedure Act 1986 Schedule 1 and penalty provisions</em></small></p>
+                    </div>
                 </div>
             `;
             
