@@ -662,34 +662,32 @@
                 // Clean section number
                 const cleanNumber = sectionNumber.replace(/^s\.?/i, '').trim();
                 
-                // PRIORITIZE CRIMINAL OFFENCE sections - look for criminal offence in Crimes Act first
-                const crimesActSection = this.findCriminalOffenceSection(cleanNumber);
-                if (crimesActSection) {
-                    return crimesActSection;
+                // SEARCH ALL SECTIONS - not just criminal offences
+                // This allows access to definitions, procedures, sentencing, etc. when displaying section details
+                
+                // Try direct match first
+                if (this.sections.has(cleanNumber)) {
+                    return this.sections.get(cleanNumber);
                 }
                 
-                // If no criminal offence section found, try alternatives
+                // Try alternative formats
                 const alternatives = [
-                    cleanNumber,
                     cleanNumber.replace(/[A-Z]/g, ''),
                     cleanNumber + 'A',
-                    cleanNumber + 'B',
+                    cleanNumber + 'B', 
                     cleanNumber + 'C'
                 ];
 
                 for (const alt of alternatives) {
-                    const crimesSection = this.findCriminalOffenceSection(alt);
-                    if (crimesSection) {
-                        return crimesSection;
+                    if (this.sections.has(alt)) {
+                        return this.sections.get(alt);
                     }
                 }
 
-                // Last resort - search by content in criminal offence sections only
+                // Search by content pattern in ALL sections
                 const contentPattern = new RegExp(`\\b(?:section|s\\.?)\\s*${cleanNumber}\\b`, 'i');
                 for (const [key, section] of this.sections) {
-                    if (section.act.includes('Crimes Act') && 
-                        legislativeSystem.search.isCriminalOffenceSection(key, section) &&
-                        (contentPattern.test(section.text) || section.title.includes(cleanNumber))) {
+                    if (contentPattern.test(section.text) || section.title.includes(cleanNumber)) {
                         return section;
                     }
                 }
@@ -1440,70 +1438,41 @@
 
             isCriminalOffenceSection(sectionNumber, sectionData) {
                 const section = parseInt(sectionNumber.replace(/[A-Z]/g, ''));
-                const title = sectionData.title.toLowerCase();
-                const text = sectionData.text.toLowerCase();
                 
-                // ALWAYS INCLUDE sections in known criminal offence ranges:
+                // STRICT CRIMINAL OFFENCE SECTIONS ONLY - based on Crimes Act structure provided
                 
-                // Part 2: Offences Against Sovereign (sections 12-16)
-                if (section >= 12 && section <= 16) return true;
+                // Part 3: Offences Against Person (sections 19-85) - ACTUAL OFFENCES ONLY
+                if (section >= 19 && section <= 85) {
+                    // Exclude definitions at start of Part 3
+                    if (section === 17 || section === 18) return false;
+                    return true;
+                }
                 
-                // Part 3: Offences Against Person (sections 17-85)
-                if (section >= 17 && section <= 85) return true;
-                
-                // Part 3A: Public Order (sections 86-115) - includes weapons, firearms
-                if (section >= 86 && section <= 115) return true;
-                
-                // Part 4: Stealing and Similar Offences (sections 117-177)
+                // Part 4: Stealing and Similar Offences (sections 117-177) - ACTUAL OFFENCES ONLY  
                 if (section >= 117 && section <= 177) return true;
                 
-                // Part 4AA: Fraud (sections 178-192)
+                // Part 4AA: Fraud (sections 178-192) - ACTUAL OFFENCES ONLY
                 if (section >= 178 && section <= 192) return true;
                 
-                // Part 4AB-4AF: Identity, money laundering, etc. (sections 192-250)
-                if (section >= 192 && section <= 250) return true;
+                // Part 5: Forgery (sections 251-307) - ACTUAL OFFENCES ONLY
+                if (section >= 251 && section <= 307) {
+                    // Exclude definitions at section 250
+                    if (section === 250) return false;
+                    return true;
+                }
                 
-                // Part 5: Forgery (sections 250-307)
-                if (section >= 250 && section <= 307) return true;
-                
-                // Part 6: Computer offences (sections 308-318)
+                // Part 6: Computer offences (sections 308-318) - ACTUAL OFFENCES ONLY
                 if (section >= 308 && section <= 318) return true;
                 
-                // Part 7: Public Justice offences (sections 319-343)
+                // Part 7: Public Justice offences (sections 319-343) - ACTUAL OFFENCES ONLY
                 if (section >= 319 && section <= 343) return true;
                 
-                // Part 14A: Miscellaneous offences (sections 540-600)
-                if (section >= 540 && section <= 600) return true;
-                
-                // ALWAYS EXCLUDE procedural/definitional sections:
-                
-                // Part 1: Definitions and interpretation (sections 1-11)
-                if (section <= 11) return false;
-                
-                // Part 1A: Jurisdiction (sections with A suffix in 10-15 range)
-                if (section >= 10 && section <= 15 && sectionNumber.includes('A')) return false;
-                
-                // Parts 8A, 9, 11, 11A: Attempts, accessories, defences (sections 344-430)
-                if (section >= 344 && section <= 430) return false;
-                
-                // Part 12: Sentencing (sections 431-473)
-                if (section >= 431 && section <= 473) return false;
-                
-                // Part 13B, 16: Miscellaneous procedural (sections 474+)
-                if (section >= 474 && section <= 539) return false;
-                
-                // For any other sections, check content
-                const offenceIndicators = [
-                    'guilty of an offence',
-                    'liable to imprisonment',
-                    'maximum penalty',
-                    'penalty:',
-                    'fine not exceeding',
-                    'imprisonment for',
-                    'unlawfully'
-                ];
-                
-                return offenceIndicators.some(indicator => text.includes(indicator));
+                // EXCLUDE ALL OTHER SECTIONS:
+                // - All definitions (sections 1-18, 250, etc.)
+                // - All procedural parts (Parts 8A, 9, 11, 11A, 12, 13B, 16)  
+                // - All jurisdiction/interpretation sections
+                // - All sentencing/penalty sections
+                return false;
             }
 
             buildConceptMap(processor) {
