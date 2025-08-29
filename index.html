@@ -1385,39 +1385,24 @@
             }
 
             buildSearchIndex(processor) {
-                console.log('Building search index - filtering for criminal offence sections only...');
+                console.log('Building search index for criminal offences...');
                 
                 let indexedCount = 0;
+                const crimesActSections = [];
                 
-                // Index ONLY criminal offence sections from Crimes Act
+                // First, find all Crimes Act sections
                 for (const [sectionNumber, sectionData] of processor.sections) {
-                    // Skip Criminal Procedure Act entirely
-                    if (sectionData.act.includes('Criminal Procedure Act')) {
-                        continue;
+                    if (sectionData.act.includes('Crimes Act')) {
+                        crimesActSections.push([sectionNumber, sectionData]);
                     }
-                    
-                    // Only process Crimes Act sections that are actual offences
-                    if (sectionData.act.includes('Crimes Act') && this.isCriminalOffenceSection(sectionNumber, sectionData)) {
-                        const searchableText = [
-                            sectionNumber,
-                            sectionData.title,
-                            sectionData.text
-                        ].join(' ').toLowerCase();
-
-                        // Create searchable terms
-                        const terms = searchableText
-                            .replace(/[^\w\s]/g, ' ')
-                            .split(/\s+/)
-                            .filter(term => term.length > 2);
-
-                        terms.forEach(term => {
-                            if (!this.searchIndex.has(term)) {
-                                this.searchIndex.set(term, new Set());
-                            }
-                            this.searchIndex.get(term).add(sectionNumber);
-                        });
-
-                        // Index by section number patterns - CRIMINAL OFFENCES ONLY
+                }
+                
+                console.log(`Found ${crimesActSections.length} total Crimes Act sections`);
+                
+                // Then filter and index criminal offences
+                for (const [sectionNumber, sectionData] of crimesActSections) {
+                    if (this.isCriminalOffenceSection(sectionNumber, sectionData)) {
+                        // Index section number patterns
                         const sectionPatterns = [
                             sectionNumber,
                             `s${sectionNumber}`,
@@ -1429,13 +1414,28 @@
                         sectionPatterns.forEach(pattern => {
                             this.searchIndex.set(pattern.toLowerCase(), new Set([sectionNumber]));
                         });
+
+                        // Index by title terms
+                        if (sectionData.title) {
+                            const titleTerms = sectionData.title.toLowerCase()
+                                .replace(/[^\w\s]/g, ' ')
+                                .split(/\s+/)
+                                .filter(term => term.length > 2);
+
+                            titleTerms.forEach(term => {
+                                if (!this.searchIndex.has(term)) {
+                                    this.searchIndex.set(term, new Set());
+                                }
+                                this.searchIndex.get(term).add(sectionNumber);
+                            });
+                        }
                         
                         indexedCount++;
                     }
                 }
 
                 this.buildConceptMap(processor);
-                console.log(`Search index built - ${indexedCount} criminal offence sections indexed`);
+                console.log(`Search index built: ${indexedCount} criminal offence sections indexed from ${crimesActSections.length} total Crimes Act sections`);
             }
 
             isCriminalOffenceSection(sectionNumber, sectionData) {
@@ -1443,111 +1443,67 @@
                 const title = sectionData.title.toLowerCase();
                 const text = sectionData.text.toLowerCase();
                 
-                // Exclude non-offence sections based on Crimes Act structure
-                
-                // Part 1: Definitions and interpretation (sections 1-10)
-                if (section <= 10) {
-                    return false;
-                }
-                
-                // Part 1A: Jurisdiction (sections 10A-10N) 
-                if (section >= 10 && section <= 15 && sectionNumber.includes('A')) {
-                    return false;
-                }
-                
-                // Parts 8A, 9, 11, 11A: Attempts, accessories, defences (sections 344-351, etc.)
-                if (section >= 344 && section <= 351) {
-                    return false;
-                }
-                
-                // Part 12: Sentencing (sections 431-440)
-                if (section >= 431 && section <= 440) {
-                    return false;
-                }
-                
-                // Part 13B, 16: Miscellaneous procedural (sections 474+)
-                if (section >= 474) {
-                    return false;
-                }
-                
-                // Exclude definitions and interpretation sections by title keywords
-                const excludeKeywords = [
-                    'definition',
-                    'interpretation',
-                    'application of',
-                    'commencement',
-                    'repeal',
-                    'saving',
-                    'transitional',
-                    'jurisdiction',
-                    'procedure',
-                    'evidence',
-                    'trial'
-                ];
-                
-                if (excludeKeywords.some(keyword => title.includes(keyword) || text.includes(keyword))) {
-                    return false;
-                }
-                
-                // Include sections that clearly define offences
-                const offenceKeywords = [
-                    'offence',
-                    'guilty',
-                    'liable',
-                    'penalty',
-                    'imprisonment',
-                    'fine',
-                    'maximum penalty',
-                    'unlawful',
-                    'prohibited',
-                    'murder',
-                    'assault',
-                    'theft',
-                    'fraud',
-                    'larceny',
-                    'robbery',
-                    'burglary'
-                ];
-                
-                // Must have clear offence indicators
-                if (offenceKeywords.some(keyword => title.includes(keyword) || text.includes(keyword))) {
-                    return true;
-                }
-                
-                // Include known criminal offence ranges based on Crimes Act structure:
+                // ALWAYS INCLUDE sections in known criminal offence ranges:
                 
                 // Part 2: Offences Against Sovereign (sections 12-16)
                 if (section >= 12 && section <= 16) return true;
                 
-                // Part 3: Offences Against Person (sections 17-80+)
+                // Part 3: Offences Against Person (sections 17-85)
                 if (section >= 17 && section <= 85) return true;
                 
-                // Part 3A: Public Order (sections 93+)  
-                if (section >= 93 && section <= 115) return true;
+                // Part 3A: Public Order (sections 86-115) - includes weapons, firearms
+                if (section >= 86 && section <= 115) return true;
                 
-                // Part 4: Stealing (sections 117-154)
-                if (section >= 117 && section <= 154) return true;
+                // Part 4: Stealing and Similar Offences (sections 117-177)
+                if (section >= 117 && section <= 177) return true;
                 
-                // Part 4AA: Fraud (sections 178+)
+                // Part 4AA: Fraud (sections 178-192)
                 if (section >= 178 && section <= 192) return true;
                 
-                // Part 4AB-4AF: Identity, money laundering, etc. (sections 192+)
+                // Part 4AB-4AF: Identity, money laundering, etc. (sections 192-250)
                 if (section >= 192 && section <= 250) return true;
                 
-                // Part 5: Forgery (sections 250+)
-                if (section >= 250 && section <= 300) return true;
+                // Part 5: Forgery (sections 250-307)
+                if (section >= 250 && section <= 307) return true;
                 
-                // Part 6: Computer offences (sections 308+)
-                if (section >= 308 && section <= 320) return true;
+                // Part 6: Computer offences (sections 308-318)
+                if (section >= 308 && section <= 318) return true;
                 
-                // Part 7: Public Justice (sections 319+)
+                // Part 7: Public Justice offences (sections 319-343)
                 if (section >= 319 && section <= 343) return true;
                 
-                // Part 14A: Miscellaneous offences (sections 540+)
+                // Part 14A: Miscellaneous offences (sections 540-600)
                 if (section >= 540 && section <= 600) return true;
                 
-                // Default exclude if not clearly an offence
-                return false;
+                // ALWAYS EXCLUDE procedural/definitional sections:
+                
+                // Part 1: Definitions and interpretation (sections 1-11)
+                if (section <= 11) return false;
+                
+                // Part 1A: Jurisdiction (sections with A suffix in 10-15 range)
+                if (section >= 10 && section <= 15 && sectionNumber.includes('A')) return false;
+                
+                // Parts 8A, 9, 11, 11A: Attempts, accessories, defences (sections 344-430)
+                if (section >= 344 && section <= 430) return false;
+                
+                // Part 12: Sentencing (sections 431-473)
+                if (section >= 431 && section <= 473) return false;
+                
+                // Part 13B, 16: Miscellaneous procedural (sections 474+)
+                if (section >= 474 && section <= 539) return false;
+                
+                // For any other sections, check content
+                const offenceIndicators = [
+                    'guilty of an offence',
+                    'liable to imprisonment',
+                    'maximum penalty',
+                    'penalty:',
+                    'fine not exceeding',
+                    'imprisonment for',
+                    'unlawfully'
+                ];
+                
+                return offenceIndicators.some(indicator => text.includes(indicator));
             }
 
             buildConceptMap(processor) {
@@ -1569,62 +1525,56 @@
             }
 
             search(query) {
+                console.log('🔍 Searching for:', query);
                 const results = new Set();
-                const searchTerms = query.toLowerCase()
-                    .replace(/[^\w\s]/g, ' ')
-                    .split(/\s+/)
-                    .filter(term => term.length > 1);
-
-                // Direct section number search - prioritize exact matches in Crimes Act
+                
+                // First priority: Direct section number match
                 const sectionMatch = query.match(/\b(\d+[A-Z]*)\b/);
                 if (sectionMatch) {
-                    const section = sectionMatch[1];
+                    const sectionNumber = sectionMatch[1];
+                    console.log('Looking for section:', sectionNumber);
                     
-                    // Check if this exact section exists in Crimes Act
-                    const crimesSection = legislativeSystem.processor.findSectionInAct(section, 'Crimes Act');
-                    if (crimesSection) {
-                        results.add(section);
-                    }
-                    
-                    // Also check indexed patterns
-                    if (this.searchIndex.has(section.toLowerCase())) {
-                        this.searchIndex.get(section.toLowerCase()).forEach(sec => {
-                            // Verify it's from Crimes Act
-                            const sectionData = legislativeSystem.processor.sections.get(sec);
-                            if (sectionData && sectionData.act.includes('Crimes Act')) {
-                                results.add(sec);
-                            }
-                        });
+                    // Check all sections for exact match in Crimes Act
+                    for (const [key, sectionData] of legislativeSystem.processor.sections) {
+                        if (key === sectionNumber && 
+                            sectionData.act.includes('Crimes Act') && 
+                            this.isCriminalOffenceSection(key, sectionData)) {
+                            console.log('✅ Found exact match:', key);
+                            results.add(key);
+                        }
                     }
                 }
 
-                // Term-based search - only return criminal offence sections
-                searchTerms.forEach(term => {
-                    if (this.searchIndex.has(term)) {
-                        this.searchIndex.get(term).forEach(section => {
-                            const sectionData = legislativeSystem.processor.sections.get(section);
-                            if (sectionData && sectionData.act.includes('Crimes Act') && 
-                                this.isCriminalOffenceSection(section, sectionData)) {
-                                results.add(section);
-                            }
-                        });
-                    }
-                });
+                // Second priority: Text-based search in criminal offence sections
+                if (results.size === 0) {
+                    const searchTerms = query.toLowerCase()
+                        .replace(/[^\w\s]/g, ' ')
+                        .split(/\s+/)
+                        .filter(term => term.length > 1);
 
-                // Concept search - only return criminal offence sections
-                searchTerms.forEach(term => {
-                    if (this.conceptMap.has(term)) {
-                        this.conceptMap.get(term).forEach(section => {
-                            const sectionData = legislativeSystem.processor.sections.get(section);
-                            if (sectionData && sectionData.act.includes('Crimes Act') && 
-                                this.isCriminalOffenceSection(section, sectionData)) {
-                                results.add(section);
-                            }
-                        });
-                    }
-                });
+                    console.log('Search terms:', searchTerms);
 
-                return Array.from(results);
+                    // Search through all Crimes Act sections
+                    for (const [sectionNum, sectionData] of legislativeSystem.processor.sections) {
+                        if (sectionData.act.includes('Crimes Act') && 
+                            this.isCriminalOffenceSection(sectionNum, sectionData)) {
+                            
+                            // Check if any search term matches
+                            const sectionText = (sectionData.title + ' ' + sectionData.content).toLowerCase();
+                            const matches = searchTerms.some(term => 
+                                sectionText.includes(term) || sectionNum.toLowerCase().includes(term.toLowerCase())
+                            );
+                            
+                            if (matches) {
+                                results.add(sectionNum);
+                            }
+                        }
+                    }
+                }
+
+                const finalResults = Array.from(results);
+                console.log('Search results:', finalResults);
+                return finalResults;
             }
 
             getSuggestions(query) {
