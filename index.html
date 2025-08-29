@@ -459,6 +459,12 @@
             font-style: italic;
             line-height: 1.4;
         }
+
+        .act-reference {
+            color: #666;
+            font-style: italic;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -2060,38 +2066,98 @@
                 };
             }
 
-            generateDocumentList(templateKey, pleaKey) {
+            generateDocumentList(templateKey, pleaKey, electionMade, chargeInfo) {
                 const baseDocuments = [
-                    { name: 'Court Attendance Notice', required: true, deadline: 'Before first appearance' },
-                    { name: 'Criminal record (if applicable)', required: false, deadline: 'Before sentencing' }
+                    { name: 'Court Attendance Notice', required: true, deadline: 'Before first appearance', act: 'Criminal Procedure Act' },
+                    { name: 'Criminal record (if applicable)', required: false, deadline: 'Before sentencing', act: 'General' }
                 ];
 
                 if (pleaKey === 'not_guilty') {
                     baseDocuments.push(
-                        { name: 'Brief of evidence', required: true, deadline: 'As per court order' },
-                        { name: 'Defence response (if required)', required: false, deadline: 'Within time specified' }
+                        { name: 'Brief of evidence', required: true, deadline: 'As per court order (usually 6 weeks)', act: 'Criminal Procedure Act Chapter 4' },
+                        { name: 'Defence response (if required)', required: false, deadline: 'Within time specified', act: 'Criminal Procedure Act' }
                     );
                 }
 
                 if (templateKey === 'indictable' || templateKey === 'table1') {
                     baseDocuments.push(
-                        { name: 'Election notice (if applicable)', required: false, deadline: 'Within election period' }
+                        { name: 'Election notice (if applicable)', required: false, deadline: 'Within election period (28 days)', act: 'Criminal Procedure Act Chapter 5' }
                     );
                 }
 
                 if (templateKey === 'indictable') {
                     baseDocuments.push(
-                        { name: 'Case conference certificate', required: false, deadline: 'Before committal' },
-                        { name: 'Committal bundle', required: true, deadline: 'For committal proceedings' }
+                        { name: 'Case conference certificate', required: false, deadline: 'Before committal', act: 'Criminal Procedure Act Chapter 3 Part 2' },
+                        { name: 'Committal bundle', required: true, deadline: 'For committal proceedings', act: 'Criminal Procedure Act Chapter 3' }
+                    );
+                }
+
+                // BAIL ACT DOCUMENTS
+                if (chargeInfo && (isShowCauseOffence(chargeInfo.section) || 
+                    (chargeInfo.penalty && legislativeSystem.classifier.calculateMaxPenalty(chargeInfo.penalty) >= 3))) {
+                    baseDocuments.push(
+                        { name: 'Show cause affidavit/submissions', required: true, deadline: 'For bail application', act: 'Bail Act 2013 s.16A' }
+                    );
+                }
+
+                if (chargeInfo && isDomesticViolenceOffence(chargeInfo.section, chargeInfo.title)) {
+                    baseDocuments.push(
+                        { name: 'Domestic violence risk assessment', required: false, deadline: 'For bail considerations', act: 'Bail Act 2013 s.18' }
+                    );
+                }
+
+                // SENTENCING DOCUMENTS
+                if (pleaKey === 'guilty') {
+                    baseDocuments.push(
+                        { name: 'Character references', required: false, deadline: 'Before sentencing', act: 'Crimes (Sentencing Procedure) Act s.21A' },
+                        { name: 'Victim impact statement', required: false, deadline: 'Before sentencing', act: 'Crimes (Sentencing Procedure) Act Part 3 Div 2' },
+                        { name: 'Plea submissions (written)', required: false, deadline: 'Before sentencing', act: 'Crimes (Sentencing Procedure) Act ss.25A-25F' }
+                    );
+
+                    // Standard non-parole period documents
+                    if (chargeInfo && hasStandardNonParolePeriod(chargeInfo.section)) {
+                        baseDocuments.push(
+                            { name: 'SNPP departure submissions', required: false, deadline: 'Before sentencing', act: 'Crimes (Sentencing Procedure) Act s.54A' }
+                        );
+                    }
+
+                    // Special assessments
+                    const penaltyYears = chargeInfo?.penalty ? legislativeSystem.classifier.calculateMaxPenalty(chargeInfo.penalty) : 0;
+                    if (penaltyYears <= 3) {
+                        baseDocuments.push(
+                            { name: 'Assessment report (for ICO)', required: false, deadline: 'If seeking ICO', act: 'Crimes (Sentencing Procedure) Act Part 5' }
+                        );
+                    }
+
+                    if (penaltyYears <= 2) {
+                        baseDocuments.push(
+                            { name: 'Community service assessment', required: false, deadline: 'If seeking CCO', act: 'Crimes (Sentencing Procedure) Act Part 7' }
+                        );
+                    }
+                }
+
+                // EVIDENCE ACT DOCUMENTS
+                if (chargeInfo && isSexualOffence(chargeInfo.section, chargeInfo.title)) {
+                    baseDocuments.push(
+                        { name: 'Closed court application', required: false, deadline: 'Before hearing', act: 'Criminal Procedure Act Chapter 6 Part 5' },
+                        { name: 'CCTV application', required: false, deadline: 'Before hearing', act: 'Criminal Procedure Act Chapter 6 Part 6' }
+                    );
+                }
+
+                if (chargeInfo && isDomesticViolenceOffence(chargeInfo.section, chargeInfo.title)) {
+                    baseDocuments.push(
+                        { name: 'Alternative arrangements application', required: false, deadline: 'Before hearing', act: 'Criminal Procedure Act Chapter 6 Part 4B' }
                     );
                 }
 
                 return baseDocuments;
             }
 
-            generatePracticeNotes(chargeInfo) {
+            generatePracticeNotes(chargeInfo, plea, electionMade, chargeValue) {
                 const notes = [];
+                const penaltyYears = chargeInfo.penalty ? legislativeSystem.classifier.calculateMaxPenalty(chargeInfo.penalty) : 0;
                 
+                // Classification-specific notes
                 if (chargeInfo.classification.includes('Table 1')) {
                     notes.push('Both prosecution and defence can elect for the matter to proceed on indictment.');
                     notes.push('Consider the advantages/disadvantages of Local Court vs higher court jurisdiction.');
@@ -2102,11 +2168,66 @@
                     notes.push('Defence should prepare for Local Court jurisdiction unless prosecution elects otherwise.');
                 }
                 
-                if (chargeInfo.penalty) {
-                    if (chargeInfo.penalty.years >= 2) {
-                        notes.push('Serious penalty - consider all mitigating factors and character references.');
+                // BAIL ACT CONSIDERATIONS
+                if (isShowCauseOffence(chargeInfo.section) || penaltyYears >= 3) {
+                    notes.push('⚠️ BAIL: Show cause required - defendant must justify why detention not warranted (Bail Act s.16A)');
+                }
+                
+                if (chargeInfo.section === '19A' || chargeInfo.section === '27' || chargeInfo.section === '28') {
+                    notes.push('⚠️ BAIL: Exceptional circumstances required for murder/attempted murder (Bail Act s.16BA)');
+                }
+                
+                if (isDomesticViolenceOffence(chargeInfo.section, chargeInfo.title)) {
+                    notes.push('⚠️ BAIL: Domestic violence considerations apply - victim safety paramount (Bail Act s.18(1)(h))');
+                }
+                
+                // SENTENCING CONSIDERATIONS
+                if (hasStandardNonParolePeriod(chargeInfo.section)) {
+                    notes.push('⚖️ SENTENCING: Standard non-parole period applies - consider reasons to depart (CSPA s.54A-54D)');
+                }
+                
+                if (plea === 'guilty') {
+                    notes.push('⚖️ SENTENCING: Guilty plea discount available - early plea = greater discount (CSPA ss.25A-25F)');
+                }
+                
+                if (penaltyYears > 0) {
+                    notes.push('⚖️ SENTENCING: Imprisonment is last resort - explore alternatives (CSPA s.5)');
+                    
+                    if (penaltyYears <= 2) {
+                        notes.push('⚖️ SENTENCING: Consider non-custodial alternatives: CCO, CRO, s.10 dismissal (CSPA Part 2 Div 3)');
                     }
-                    notes.push(`Maximum penalty: ${this.formatPenalty(chargeInfo.penalty)}`);
+                    
+                    if (penaltyYears <= 3) {
+                        notes.push('⚖️ SENTENCING: Intensive correction order available as alternative to full-time custody (CSPA Part 5)');
+                    }
+                }
+                
+                // EVIDENCE/PROCEDURE CONSIDERATIONS
+                if (isSexualOffence(chargeInfo.section, chargeInfo.title)) {
+                    notes.push('📋 EVIDENCE: Sexual offence provisions apply - closed court/CCTV available (CPA Chapter 6 Part 5-6)');
+                    notes.push('📋 EVIDENCE: Restrictions on sexual experience evidence and cross-examination');
+                }
+                
+                if (isDomesticViolenceOffence(chargeInfo.section, chargeInfo.title)) {
+                    notes.push('📋 EVIDENCE: Domestic violence evidence provisions - special measures available (CPA Chapter 6 Part 4B)');
+                }
+                
+                // VALUE-BASED CONSIDERATIONS
+                if (chargeValue) {
+                    if (chargeInfo.section === '117' && chargeValue >= 5000) {
+                        notes.push(`💰 VALUE: Larceny over $5,000 (actual: $${chargeValue.toLocaleString()}) - Table 1 classification confirmed`);
+                    } else if (chargeInfo.section === '117' && chargeValue < 5000) {
+                        notes.push(`💰 VALUE: Larceny under $5,000 (actual: $${chargeValue.toLocaleString()}) - reduced to Table 2`);
+                    }
+                }
+                
+                // PENALTY INFORMATION
+                if (chargeInfo.penalty) {
+                    notes.push(`📏 Maximum penalty: ${this.formatPenalty(chargeInfo.penalty)}`);
+                    
+                    if (penaltyYears >= 5) {
+                        notes.push('⚠️ SERIOUS OFFENCE: Consider all mitigating factors and character references');
+                    }
                 }
                 
                 return notes;
@@ -2162,10 +2283,11 @@
 
             async loadDefaultFiles() {
                 try {
-                    updateStatus('Loading default legislation files...', 'loading');
+                    updateStatus('Loading NSW criminal law legislation suite...', 'loading');
                     let totalSections = 0;
+                    let actsLoaded = [];
                     
-                    // Load Criminal Procedure Act (Schedule 1 only)
+                    // Load Criminal Procedure Act (Schedule 1 only for classification)
                     const cpaResponse = await fetch('./cpa1986188.txt');
                     if (cpaResponse.ok) {
                         const cpaText = await cpaResponse.text();
@@ -2176,6 +2298,7 @@
                         if (cpaData && cpaData.schedule1) {
                             console.log('Parsing Schedule 1 from stored CPA data...');
                             this.classifier.parseSchedule1(cpaData.schedule1);
+                            actsLoaded.push('Criminal Procedure Act 1986 (Schedule 1)');
                         } else {
                             console.warn('No Schedule 1 found in Criminal Procedure Act');
                         }
@@ -2187,12 +2310,37 @@
                         const crimesText = await crimesResponse.text();
                         const crimesSections = await this.processor.processLegislation(crimesText, 'Crimes Act 1900');
                         totalSections += crimesSections;
+                        actsLoaded.push(`Crimes Act 1900 (${crimesSections} offences)`);
+                    }
+                    
+                    // Load Crimes (Sentencing Procedure) Act (for cross-references and sentencing guidance)
+                    try {
+                        const sentencingResponse = await fetch('./cspa1999.txt');
+                        if (sentencingResponse.ok) {
+                            const sentencingText = await sentencingResponse.text();
+                            await this.processor.processLegislation(sentencingText, 'Crimes (Sentencing Procedure) Act 1999');
+                            actsLoaded.push('Crimes (Sentencing Procedure) Act 1999');
+                        }
+                    } catch (e) {
+                        console.log('Sentencing Act not found - will work without it');
+                    }
+                    
+                    // Load Bail Act (for cross-references and bail guidance)
+                    try {
+                        const bailResponse = await fetch('./ba2013.txt');
+                        if (bailResponse.ok) {
+                            const bailText = await bailResponse.text();
+                            await this.processor.processLegislation(bailText, 'Bail Act 2013');
+                            actsLoaded.push('Bail Act 2013');
+                        }
+                    } catch (e) {
+                        console.log('Bail Act not found - will work without it');
                     }
                     
                     // Build search index (only criminal offence sections from Crimes Act)
                     this.search.buildSearchIndex(this.processor);
                     
-                    updateStatus(`Loaded ${totalSections} criminal offence sections for search. Schedule 1 loaded for classification.`, 'success');
+                    updateStatus(`NSW Criminal Law Suite Loaded: ${actsLoaded.join(', ')}. ${totalSections} searchable offences.`, 'success');
                     
                 } catch (error) {
                     console.error('Error loading files:', error);
@@ -2365,36 +2513,94 @@
                 jurisdiction: []
             };
 
-            // Bail Act references
+            // BAIL ACT 2013 REFERENCES - Based on actual Act structure
             if (chargeInfo.penalty) {
                 const penaltyYears = legislativeSystem.classifier.calculateMaxPenalty(chargeInfo.penalty);
                 
-                if (penaltyYears >= 3) {
-                    references.bail.push('Show cause provision may apply - Bail Act 2013 s.16B');
+                // Show cause offences (s.16B) - serious offences requiring defendant to show why bail should be granted
+                if (penaltyYears >= 3 || isShowCauseOffence(chargeInfo.section)) {
+                    references.bail.push('Show cause requirement - Bail Act 2013 s.16A & s.16B (defendant must show why detention not justified)');
                 }
-                if (chargeInfo.section === '19A') {
-                    references.bail.push('Exceptional circumstances required - Bail Act 2013 s.16BA');
+                
+                // Exceptional circumstances (s.22A) - terrorism related
+                if (chargeInfo.title && chargeInfo.title.toLowerCase().includes('terrorism')) {
+                    references.bail.push('Exceptional circumstances required - Bail Act 2013 s.22A (terrorism offences)');
+                }
+                
+                // Murder/attempted murder - exceptional circumstances
+                if (chargeInfo.section === '19A' || chargeInfo.section === '27' || chargeInfo.section === '28') {
+                    references.bail.push('Exceptional circumstances required - Bail Act 2013 s.16BA (murder/attempted murder)');
+                }
+                
+                // Unacceptable risk test applies to all offences
+                references.bail.push('Unacceptable risk test applies - Bail Act 2013 Part 3 Division 2 (ss.17-20)');
+                
+                // Domestic violence provisions
+                if (isDomesticViolenceOffence(chargeInfo.section, chargeInfo.title)) {
+                    references.bail.push('Domestic violence considerations - Bail Act 2013 s.18(1)(h) & mandatory conditions s.36A');
                 }
             }
 
-            // Evidence Act references
-            if (chargeInfo.title && chargeInfo.title.toLowerCase().includes('sexual')) {
-                references.evidence.push('Special provisions apply - Evidence Act 1995 Part 2 Division 1');
-                references.evidence.push('Complainant evidence provisions - Criminal Procedure Act Chapter 6 Part 5');
-            }
-            
-            if (chargeInfo.title && chargeInfo.title.toLowerCase().includes('domestic')) {
-                references.evidence.push('Domestic violence evidence provisions - Criminal Procedure Act Part 4B');
+            // CRIMES (SENTENCING PROCEDURE) ACT 1999 REFERENCES - Based on actual Act structure
+            if (chargeInfo.penalty) {
+                const penaltyYears = legislativeSystem.classifier.calculateMaxPenalty(chargeInfo.penalty);
+                
+                // Standard non-parole periods (Part 4 Division 1A)
+                if (hasStandardNonParolePeriod(chargeInfo.section)) {
+                    references.sentencing.push('Standard non-parole period applies - Crimes (Sentencing Procedure) Act s.54A-54D & Table');
+                }
+                
+                // Imprisonment as last resort (s.5)
+                if (penaltyYears > 0) {
+                    references.sentencing.push('Imprisonment last resort principle - Crimes (Sentencing Procedure) Act s.5');
+                }
+                
+                // Guilty plea discount (Part 3 Division 1A)
+                references.sentencing.push('Guilty plea discount available - Crimes (Sentencing Procedure) Act ss.25A-25F');
+                
+                // Victim impact statements (Part 3 Division 2)
+                references.sentencing.push('Victim impact statement provisions - Crimes (Sentencing Procedure) Act ss.26-30N');
+                
+                // Aggravating/mitigating factors (s.21A)
+                references.sentencing.push('Aggravating/mitigating factors - Crimes (Sentencing Procedure) Act s.21A');
+                
+                // Special provisions for certain offence types
+                if (isSexualOffence(chargeInfo.section, chargeInfo.title)) {
+                    references.sentencing.push('Sexual offence sentencing provisions - Crimes (Sentencing Procedure) Act s.25AA');
+                }
+                
+                if (isDomesticViolenceOffence(chargeInfo.section, chargeInfo.title)) {
+                    references.sentencing.push('Domestic violence sentencing - Crimes (Sentencing Procedure) Act s.4A-4B');
+                }
+                
+                // Alternative sentences based on penalty severity
+                if (penaltyYears <= 2) {
+                    references.sentencing.push('Non-custodial alternatives available - Crimes (Sentencing Procedure) Act Part 2 Division 3 (CCO, CRO, s.10)');
+                }
+                
+                if (penaltyYears <= 3) {
+                    references.sentencing.push('Intensive correction order available - Crimes (Sentencing Procedure) Act Part 5');
+                }
             }
 
-            // Procedure references
-            references.procedure.push(`Classification: ${chargeInfo.classification}`);
+            // CRIMINAL PROCEDURE ACT REFERENCES - Based on actual Act structure
+            references.procedure.push(`Classification: ${chargeInfo.classification} (Criminal Procedure Act Schedule 1)`);
             
             if (chargeInfo.election && !chargeInfo.election.includes('No election')) {
-                references.procedure.push(`Election rights: ${chargeInfo.election}`);
-                references.procedure.push('Election procedures - Criminal Procedure Act ss.260-264');
+                references.procedure.push(`Election rights: ${chargeInfo.election} - Criminal Procedure Act Chapter 5`);
             }
 
+            // Evidence provisions based on offence type
+            if (isSexualOffence(chargeInfo.section, chargeInfo.title)) {
+                references.evidence.push('Sexual offence evidence provisions - Criminal Procedure Act Chapter 6 Part 5');
+                references.evidence.push('Closed court/CCTV available - Criminal Procedure Act Chapter 6 Part 6');
+            }
+            
+            if (isDomesticViolenceOffence(chargeInfo.section, chargeInfo.title)) {
+                references.evidence.push('Domestic violence evidence provisions - Criminal Procedure Act Chapter 6 Part 4B');
+            }
+
+            // Brief service requirements
             if (chargeInfo.briefService) {
                 references.procedure.push(`Brief service: ${chargeInfo.briefService}`);
             }
@@ -2406,20 +2612,47 @@
                 references.jurisdiction.push('Summary disposal provisions - Criminal Procedure Act Chapter 5');
             }
 
-            // Sentencing references
-            if (chargeInfo.penalty) {
-                const penaltyYears = legislativeSystem.classifier.calculateMaxPenalty(chargeInfo.penalty);
-                
-                if (penaltyYears >= 5) {
-                    references.sentencing.push('Standard non-parole period may apply - Crimes (Sentencing Procedure) Act');
-                }
-                
-                if (chargeInfo.section && chargeInfo.section.startsWith('61')) {
-                    references.sentencing.push('Sexual offence sentencing provisions may apply');
-                }
-            }
-
             return references;
+        }
+
+        // Helper functions for specific offence categorization
+        function isShowCauseOffence(section) {
+            // Based on Bail Act s.16B schedule
+            const showCauseOffences = [
+                '19A', '19B', '20', '21', // Murder, attempted murder
+                '33', '35', '35A', // Wounding, GBH
+                '61I', '61J', '61JA', '61KC', '61KD', // Sexual offences
+                '94', '95', '96', '97', '98', // Robbery offences
+                '109', '110', '111', '112', // Break and enter offences
+                '154F', '154G', '154H' // Organised crime offences
+            ];
+            return showCauseOffences.includes(section);
+        }
+
+        function hasStandardNonParolePeriod(section) {
+            // Based on Crimes (Sentencing Procedure) Act Table to s.54D
+            const snppOffences = [
+                '19A', // Murder
+                '33', '35', // Wounding with intent
+                '61I', '61J', '61JA', // Sexual assault offences
+                '94', '95', '96', // Robbery offences
+                '112', // Break and enter dwelling house
+                '154F', '154G' // Drug trafficking
+            ];
+            return snppOffences.includes(section);
+        }
+
+        function isSexualOffence(section, title) {
+            if (title && title.toLowerCase().includes('sexual')) return true;
+            const sexualSections = ['61I', '61J', '61JA', '61KC', '61KD', '61O', '66C', '66D'];
+            return sexualSections.includes(section);
+        }
+
+        function isDomesticViolenceOffence(section, title) {
+            if (title && title.toLowerCase().includes('domestic')) return true;
+            if (title && title.toLowerCase().includes('intimate')) return true;
+            // Can also be contextual - any assault/threat against intimate partner
+            return false;
         }
 
         // Enhanced workflow generation function
@@ -2800,12 +3033,13 @@
                 </div>
                 
                 <div class="documents-checklist">
-                    <h4>Required Documents</h4>
+                    <h4>Required Documents & Forms</h4>
                     ${workflow.documents.map(doc => `
                         <div class="checklist-item">
                             <input type="checkbox" id="doc-${doc.name.replace(/\s/g, '')}" ${doc.required ? 'required' : ''}>
                             <label for="doc-${doc.name.replace(/\s/g, '')}">${doc.name} ${doc.required ? '(Required)' : '(Optional)'}</label>
                             <small>Deadline: ${doc.deadline}</small>
+                            ${doc.act ? `<br><small class="act-reference">Authority: ${doc.act}</small>` : ''}
                         </div>
                     `).join('')}
                 </div>
