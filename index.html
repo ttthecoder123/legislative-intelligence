@@ -501,7 +501,7 @@
                                autocomplete="off">
                         <div id="suggestionsList" class="suggestions-list"></div>
                     </div>
-                    <p class="search-help"><small><strong>Note:</strong> Search finds criminal offences from the Crimes Act 1900. The system automatically checks Schedule 1 of the Criminal Procedure Act 1986 for classification.</small></p>
+                    <p class="search-help"><small><strong>How it works:</strong> Search finds criminal offences from the Crimes Act 1900. The system uses Schedule 1 of the Criminal Procedure Act 1986 to determine classification (Table 1/Table 2) and jurisdiction. Procedural sections are not searchable.</small></p>
                 </div>
 
                 <div class="form-group">
@@ -561,6 +561,34 @@
 
             async processLegislation(text, actName) {
                 console.log(`Processing ${actName}...`);
+                
+                // Special handling for Criminal Procedure Act - we only want Schedule 1
+                if (actName.includes('Criminal Procedure Act')) {
+                    console.log('Criminal Procedure Act detected - extracting Schedule 1 only for classification');
+                    
+                    // Find and extract only Schedule 1 for classification purposes
+                    const schedule1Match = text.match(/Schedule 1.*?(?=Schedule 2|$)/s);
+                    if (schedule1Match) {
+                        console.log('Found Schedule 1 - processing for classification only');
+                        
+                        // Store Schedule 1 content for the classifier
+                        this.acts.set(actName, {
+                            text: text,
+                            schedule1: schedule1Match[0],
+                            sectionCount: 0, // Don't count CPA sections as searchable
+                            processed: true,
+                            note: 'Only Schedule 1 processed - used for classification only'
+                        });
+                        
+                        return 0; // No sections added to search index
+                    }
+                    
+                    console.log('No Schedule 1 found in Criminal Procedure Act');
+                    return 0;
+                }
+                
+                // Normal processing for Crimes Act and other acts
+                console.log(`Processing all sections from ${actName}...`);
                 
                 // Extract all sections with flexible patterns
                 const sectionPatterns = [
@@ -628,36 +656,49 @@
                 // Clean section number
                 const cleanNumber = sectionNumber.replace(/^s\.?/i, '').trim();
                 
-                // PRIORITIZE CRIMES ACT sections - look for Crimes Act match first
-                const crimesActSection = this.findSectionInAct(cleanNumber, 'Crimes Act');
+                // PRIORITIZE CRIMINAL OFFENCE sections - look for criminal offence in Crimes Act first
+                const crimesActSection = this.findCriminalOffenceSection(cleanNumber);
                 if (crimesActSection) {
                     return crimesActSection;
                 }
                 
-                // If no Crimes Act section found, try alternatives in Crimes Act
+                // If no criminal offence section found, try alternatives
                 const alternatives = [
                     cleanNumber,
                     cleanNumber.replace(/[A-Z]/g, ''),
                     cleanNumber + 'A',
-                    cleanNumber + 'B'
+                    cleanNumber + 'B',
+                    cleanNumber + 'C'
                 ];
 
                 for (const alt of alternatives) {
-                    const crimesSection = this.findSectionInAct(alt, 'Crimes Act');
+                    const crimesSection = this.findCriminalOffenceSection(alt);
                     if (crimesSection) {
                         return crimesSection;
                     }
                 }
 
-                // Last resort - search by content in Crimes Act only
+                // Last resort - search by content in criminal offence sections only
                 const contentPattern = new RegExp(`\\b(?:section|s\\.?)\\s*${cleanNumber}\\b`, 'i');
                 for (const [key, section] of this.sections) {
                     if (section.act.includes('Crimes Act') && 
+                        legislativeSystem.search.isCriminalOffenceSection(key, section) &&
                         (contentPattern.test(section.text) || section.title.includes(cleanNumber))) {
                         return section;
                     }
                 }
 
+                return null;
+            }
+
+            findCriminalOffenceSection(sectionNumber) {
+                for (const [key, section] of this.sections) {
+                    if (key === sectionNumber && 
+                        section.act.includes('Crimes Act') &&
+                        legislativeSystem.search.isCriminalOffenceSection(key, section)) {
+                        return section;
+                    }
+                }
                 return null;
             }
 
@@ -1338,17 +1379,19 @@
             }
 
             buildSearchIndex(processor) {
-                console.log('Building search index - focusing on Crimes Act sections only...');
+                console.log('Building search index - filtering for criminal offence sections only...');
                 
-                // Index ONLY Crimes Act sections (not Criminal Procedure Act)
+                let indexedCount = 0;
+                
+                // Index ONLY criminal offence sections from Crimes Act
                 for (const [sectionNumber, sectionData] of processor.sections) {
-                    // Skip Criminal Procedure Act sections - we only want to search Crimes Act
+                    // Skip Criminal Procedure Act entirely
                     if (sectionData.act.includes('Criminal Procedure Act')) {
                         continue;
                     }
                     
-                    // Only index Crimes Act sections for search
-                    if (sectionData.act.includes('Crimes Act')) {
+                    // Only process Crimes Act sections that are actual offences
+                    if (sectionData.act.includes('Crimes Act') && this.isCriminalOffenceSection(sectionNumber, sectionData)) {
                         const searchableText = [
                             sectionNumber,
                             sectionData.title,
@@ -1368,7 +1411,7 @@
                             this.searchIndex.get(term).add(sectionNumber);
                         });
 
-                        // Index by section number patterns - CRIMES ACT ONLY
+                        // Index by section number patterns - CRIMINAL OFFENCES ONLY
                         const sectionPatterns = [
                             sectionNumber,
                             `s${sectionNumber}`,
@@ -1380,11 +1423,125 @@
                         sectionPatterns.forEach(pattern => {
                             this.searchIndex.set(pattern.toLowerCase(), new Set([sectionNumber]));
                         });
+                        
+                        indexedCount++;
                     }
                 }
 
                 this.buildConceptMap(processor);
-                console.log('Search index built - Crimes Act sections only');
+                console.log(`Search index built - ${indexedCount} criminal offence sections indexed`);
+            }
+
+            isCriminalOffenceSection(sectionNumber, sectionData) {
+                const section = parseInt(sectionNumber.replace(/[A-Z]/g, ''));
+                const title = sectionData.title.toLowerCase();
+                const text = sectionData.text.toLowerCase();
+                
+                // Exclude non-offence sections based on Crimes Act structure
+                
+                // Part 1: Definitions and interpretation (sections 1-10)
+                if (section <= 10) {
+                    return false;
+                }
+                
+                // Part 1A: Jurisdiction (sections 10A-10N) 
+                if (section >= 10 && section <= 15 && sectionNumber.includes('A')) {
+                    return false;
+                }
+                
+                // Parts 8A, 9, 11, 11A: Attempts, accessories, defences (sections 344-351, etc.)
+                if (section >= 344 && section <= 351) {
+                    return false;
+                }
+                
+                // Part 12: Sentencing (sections 431-440)
+                if (section >= 431 && section <= 440) {
+                    return false;
+                }
+                
+                // Part 13B, 16: Miscellaneous procedural (sections 474+)
+                if (section >= 474) {
+                    return false;
+                }
+                
+                // Exclude definitions and interpretation sections by title keywords
+                const excludeKeywords = [
+                    'definition',
+                    'interpretation',
+                    'application of',
+                    'commencement',
+                    'repeal',
+                    'saving',
+                    'transitional',
+                    'jurisdiction',
+                    'procedure',
+                    'evidence',
+                    'trial'
+                ];
+                
+                if (excludeKeywords.some(keyword => title.includes(keyword) || text.includes(keyword))) {
+                    return false;
+                }
+                
+                // Include sections that clearly define offences
+                const offenceKeywords = [
+                    'offence',
+                    'guilty',
+                    'liable',
+                    'penalty',
+                    'imprisonment',
+                    'fine',
+                    'maximum penalty',
+                    'unlawful',
+                    'prohibited',
+                    'murder',
+                    'assault',
+                    'theft',
+                    'fraud',
+                    'larceny',
+                    'robbery',
+                    'burglary'
+                ];
+                
+                // Must have clear offence indicators
+                if (offenceKeywords.some(keyword => title.includes(keyword) || text.includes(keyword))) {
+                    return true;
+                }
+                
+                // Include known criminal offence ranges based on Crimes Act structure:
+                
+                // Part 2: Offences Against Sovereign (sections 12-16)
+                if (section >= 12 && section <= 16) return true;
+                
+                // Part 3: Offences Against Person (sections 17-80+)
+                if (section >= 17 && section <= 85) return true;
+                
+                // Part 3A: Public Order (sections 93+)  
+                if (section >= 93 && section <= 115) return true;
+                
+                // Part 4: Stealing (sections 117-154)
+                if (section >= 117 && section <= 154) return true;
+                
+                // Part 4AA: Fraud (sections 178+)
+                if (section >= 178 && section <= 192) return true;
+                
+                // Part 4AB-4AF: Identity, money laundering, etc. (sections 192+)
+                if (section >= 192 && section <= 250) return true;
+                
+                // Part 5: Forgery (sections 250+)
+                if (section >= 250 && section <= 300) return true;
+                
+                // Part 6: Computer offences (sections 308+)
+                if (section >= 308 && section <= 320) return true;
+                
+                // Part 7: Public Justice (sections 319+)
+                if (section >= 319 && section <= 343) return true;
+                
+                // Part 14A: Miscellaneous offences (sections 540+)
+                if (section >= 540 && section <= 600) return true;
+                
+                // Default exclude if not clearly an offence
+                return false;
             }
 
             buildConceptMap(processor) {
@@ -1435,24 +1592,26 @@
                     }
                 }
 
-                // Term-based search - only return Crimes Act sections
+                // Term-based search - only return criminal offence sections
                 searchTerms.forEach(term => {
                     if (this.searchIndex.has(term)) {
                         this.searchIndex.get(term).forEach(section => {
                             const sectionData = legislativeSystem.processor.sections.get(section);
-                            if (sectionData && sectionData.act.includes('Crimes Act')) {
+                            if (sectionData && sectionData.act.includes('Crimes Act') && 
+                                this.isCriminalOffenceSection(section, sectionData)) {
                                 results.add(section);
                             }
                         });
                     }
                 });
 
-                // Concept search - only return Crimes Act sections
+                // Concept search - only return criminal offence sections
                 searchTerms.forEach(term => {
                     if (this.conceptMap.has(term)) {
                         this.conceptMap.get(term).forEach(section => {
                             const sectionData = legislativeSystem.processor.sections.get(section);
-                            if (sectionData && sectionData.act.includes('Crimes Act')) {
+                            if (sectionData && sectionData.act.includes('Crimes Act') && 
+                                this.isCriminalOffenceSection(section, sectionData)) {
                                 results.add(section);
                             }
                         });
@@ -1468,12 +1627,14 @@
                 const suggestions = [];
                 const queryLower = query.toLowerCase();
 
-                // Section number suggestions - CRIMES ACT ONLY
+                // Section number suggestions - CRIMINAL OFFENCES ONLY
                 const sectionPattern = /\d+[A-Z]*/;
                 if (sectionPattern.test(query)) {
                     for (const [section, data] of legislativeSystem.processor.sections) {
-                        // Only suggest Crimes Act sections
-                        if (data.act.includes('Crimes Act') && section.toLowerCase().includes(queryLower)) {
+                        // Only suggest criminal offence sections
+                        if (data.act.includes('Crimes Act') && 
+                            legislativeSystem.search.isCriminalOffenceSection(section, data) &&
+                            section.toLowerCase().includes(queryLower)) {
                             suggestions.push({
                                 type: 'section',
                                 text: `Section ${section} - ${data.title} (Crimes Act)`,
@@ -1483,10 +1644,11 @@
                     }
                 }
 
-                // Title-based suggestions - CRIMES ACT ONLY
+                // Title-based suggestions - CRIMINAL OFFENCES ONLY
                 for (const [section, title] of legislativeSystem.processor.sectionTitles) {
                     const sectionData = legislativeSystem.processor.sections.get(section);
                     if (sectionData && sectionData.act.includes('Crimes Act') && 
+                        legislativeSystem.search.isCriminalOffenceSection(section, sectionData) &&
                         title.toLowerCase().includes(queryLower)) {
                         suggestions.push({
                             type: 'title',
@@ -2001,31 +2163,36 @@
             async loadDefaultFiles() {
                 try {
                     updateStatus('Loading default legislation files...', 'loading');
+                    let totalSections = 0;
                     
-                    // Load Criminal Procedure Act
+                    // Load Criminal Procedure Act (Schedule 1 only)
                     const cpaResponse = await fetch('./cpa1986188.txt');
                     if (cpaResponse.ok) {
                         const cpaText = await cpaResponse.text();
                         await this.processor.processLegislation(cpaText, 'Criminal Procedure Act 1986');
                         
-                        // Parse Schedule 1 for classification
-                        const scheduleMatch = cpaText.match(/Schedule 1.*$/s);
-                        if (scheduleMatch) {
-                            this.classifier.parseSchedule1(scheduleMatch[0]);
+                        // Get stored Schedule 1 from processor and parse for classification
+                        const cpaData = this.processor.acts.get('Criminal Procedure Act 1986');
+                        if (cpaData && cpaData.schedule1) {
+                            console.log('Parsing Schedule 1 from stored CPA data...');
+                            this.classifier.parseSchedule1(cpaData.schedule1);
+                        } else {
+                            console.warn('No Schedule 1 found in Criminal Procedure Act');
                         }
                     }
                     
-                    // Load Crimes Act
+                    // Load Crimes Act (all criminal offence sections)
                     const crimesResponse = await fetch('./ca190082.txt');
                     if (crimesResponse.ok) {
                         const crimesText = await crimesResponse.text();
-                        await this.processor.processLegislation(crimesText, 'Crimes Act 1900');
+                        const crimesSections = await this.processor.processLegislation(crimesText, 'Crimes Act 1900');
+                        totalSections += crimesSections;
                     }
                     
-                    // Build search index
+                    // Build search index (only criminal offence sections from Crimes Act)
                     this.search.buildSearchIndex(this.processor);
                     
-                    updateStatus(`Loaded ${this.processor.sections.size} sections from legislation files`, 'success');
+                    updateStatus(`Loaded ${totalSections} criminal offence sections for search. Schedule 1 loaded for classification.`, 'success');
                     
                 } catch (error) {
                     console.error('Error loading files:', error);
@@ -2285,17 +2452,25 @@
             console.log('🔍 Running NSW Criminal Law Intelligence System Validation...');
             
             if (legislativeSystem.loaded) {
+                console.log('🔍 NSW CRIMINAL LAW INTELLIGENCE SYSTEM - COMPREHENSIVE VALIDATION');
+                console.log('═'.repeat(70));
+                
+                // Test complete workflow (this is the most important test)
+                testCompleteWorkflow();
+                
+                // Additional component tests
+                console.log('\n📋 COMPONENT TESTING');
+                console.log('─'.repeat(30));
+                
                 // Run Schedule 1 classification tests
                 legislativeSystem.classifier.validateClassification();
                 
                 // Test penalty extraction
                 testPenaltyExtraction();
                 
-                // Test workflow generation
-                testWorkflowGeneration();
-                
-                console.log('✅ System validation complete - check console for results');
-                updateStatus('System validation complete - check console for detailed results', 'success');
+                console.log('\n✅ COMPREHENSIVE VALIDATION COMPLETE');
+                console.log('Check console above for detailed results of each test scenario.');
+                updateStatus('Complete system validation finished - check console for detailed results', 'success');
             } else {
                 console.log('❌ Cannot validate - legislation not loaded');
                 updateStatus('Load legislation files first to run validation', 'warning');
@@ -2340,6 +2515,159 @@
                 const workflow = legislativeSystem.workflow.generateWorkflow(mockCharge, test.plea, test.election);
                 console.log(`✓ Workflow generated for: ${test.description} - ${workflow.steps.length} steps`);
             });
+        }
+
+        function testCompleteWorkflow() {
+            console.log('\n🎯 TESTING COMPLETE NSW CRIMINAL LAW WORKFLOW\n');
+            
+            if (!legislativeSystem.loaded) {
+                console.log('❌ Cannot test - legislation not loaded');
+                return;
+            }
+            
+            // Test real NSW criminal law scenarios
+            const testScenarios = [
+                {
+                    name: 'Sexual Assault (Table 1)',
+                    search: '61I',
+                    expectedClassification: 'Table 1',
+                    expectedCourt: 'Local Court (unless elected)',
+                    plea: 'not_guilty',
+                    election: false
+                },
+                {
+                    name: 'Assault Police (Table 1)', 
+                    search: '60',
+                    expectedClassification: 'Table 1',
+                    expectedCourt: 'Local Court (unless elected)',
+                    plea: 'guilty',
+                    election: false
+                },
+                {
+                    name: 'Larceny under $5000 (Table 2)',
+                    search: '117 larceny $1000',
+                    expectedClassification: 'Table 2',
+                    expectedCourt: 'Local Court (unless prosecution elects)',
+                    plea: 'not_guilty',
+                    election: false,
+                    chargeValue: 1000
+                },
+                {
+                    name: 'Larceny over $5000 (Table 1)',
+                    search: '117 larceny $10000',
+                    expectedClassification: 'Table 1', 
+                    expectedCourt: 'Local Court (unless elected)',
+                    plea: 'not_guilty',
+                    election: true,
+                    chargeValue: 10000
+                },
+                {
+                    name: 'Murder (Strictly Indictable)',
+                    search: '19A',
+                    expectedClassification: 'Strictly Indictable',
+                    expectedCourt: 'Supreme Court',
+                    plea: 'not_guilty',
+                    election: false
+                }
+            ];
+            
+            testScenarios.forEach((scenario, index) => {
+                console.log(`\n${index + 1}. TESTING: ${scenario.name}`);
+                console.log('━'.repeat(50));
+                
+                // Step 1: Search
+                const searchResults = legislativeSystem.search.search(scenario.search);
+                console.log(`🔍 Search "${scenario.search}": ${searchResults.length > 0 ? '✓ Found' : '✗ Not found'}`);
+                
+                if (searchResults.length === 0) {
+                    console.log('❌ Search failed - cannot continue workflow test');
+                    return;
+                }
+                
+                // Step 2: Extract Section
+                const sectionNumber = searchResults[0];
+                const sectionData = legislativeSystem.processor.extractSection('', sectionNumber);
+                console.log(`📖 Section Data: ${sectionData ? '✓ Found' : '✗ Not found'} - ${sectionData?.title || 'N/A'}`);
+                
+                // Step 3: Extract Charge Value
+                const chargeValue = scenario.chargeValue || extractChargeValue(scenario.search);
+                if (chargeValue) {
+                    console.log(`💰 Charge Value: $${chargeValue.toLocaleString()}`);
+                }
+                
+                // Step 4: Classify Offence
+                const classification = legislativeSystem.classifier.classifyOffence(
+                    sectionNumber,
+                    sectionData.penalty,
+                    chargeValue,
+                    { death: scenario.search.toLowerCase().includes('death') }
+                );
+                
+                console.log(`⚖️ Classification: ${classification.classification} ${classification.classification === scenario.expectedClassification ? '✓' : '✗'}`);
+                console.log(`🏛️ Court: ${classification.court}`);
+                console.log(`🗳️ Election: ${classification.election}`);
+                if (classification.reason) {
+                    console.log(`📝 Reason: ${classification.reason}`);
+                }
+                
+                // Step 5: Generate Workflow
+                const chargeInfo = {
+                    section: sectionNumber,
+                    title: sectionData.title,
+                    act: sectionData.act,
+                    penalty: sectionData.penalty,
+                    classification: classification.classification,
+                    court: classification.court,
+                    election: classification.election,
+                    chargeValue: chargeValue
+                };
+                
+                const workflow = legislativeSystem.workflow.generateWorkflow(
+                    chargeInfo,
+                    scenario.plea,
+                    scenario.election,
+                    chargeValue
+                );
+                
+                console.log(`📋 Workflow Generated: ${workflow.steps.length} steps`);
+                console.log(`📄 Documents Required: ${workflow.documents.length} items`);
+                console.log(`⏰ Key Deadlines: ${Object.keys(workflow.keyDeadlines).length} deadlines`);
+                console.log(`📌 Practice Notes: ${workflow.notes.length} notes`);
+                
+                // Step 6: Check Critical Workflow Elements
+                const criticalChecks = [
+                    { item: 'First appearance step', check: workflow.steps.some(s => s.task.includes('First appearance')) },
+                    { item: 'Plea handling', check: workflow.steps.some(s => s.task.toLowerCase().includes('plea')) },
+                    { item: 'Court alignment', check: workflow.court === classification.court },
+                    { item: 'Election consideration', check: scenario.election ? workflow.electionMade : !workflow.electionMade },
+                    { item: 'Brief service rule', check: workflow.briefService && workflow.briefService !== 'undefined' }
+                ];
+                
+                console.log('🔧 Workflow Validation:');
+                criticalChecks.forEach(check => {
+                    console.log(`   ${check.check ? '✓' : '✗'} ${check.item}`);
+                });
+                
+                // Step 7: Cross-References
+                const crossRefs = generateCrossReferences(chargeInfo);
+                const totalRefs = Object.values(crossRefs).reduce((sum, refs) => sum + refs.length, 0);
+                console.log(`🔗 Cross-References Generated: ${totalRefs} total`);
+                if (totalRefs > 0) {
+                    Object.entries(crossRefs).forEach(([category, refs]) => {
+                        if (refs.length > 0) {
+                            console.log(`   ${category}: ${refs.length} references`);
+                        }
+                    });
+                }
+                
+                // Overall scenario result
+                const passed = classification.classification === scenario.expectedClassification && 
+                             workflow.steps.length > 0 && 
+                             criticalChecks.every(check => check.check);
+                console.log(`\n${passed ? '✅ SCENARIO PASSED' : '❌ SCENARIO FAILED'}\n`);
+            });
+            
+            console.log('🎯 COMPLETE WORKFLOW TESTING FINISHED');
         }
 
         function displayResults(results) {
