@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSW Criminal Law Legislative Intelligence System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #2a5298;
+        }
+
+        .panel h2 {
+            color: #1e3c72;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+
+        .file-upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .file-upload-area:hover {
+            border-color: #2a5298;
+            background-color: #f8f9ff;
+        }
+
+        .file-upload-area.dragover {
+            border-color: #2a5298;
+            background-color: #e8f0ff;
+        }
+
+        .search-section {
+            margin-bottom: 25px;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 12px 15px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #2a5298;
+            box-shadow: 0 0 10px rgba(42, 82, 152, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(42, 82, 152, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+
+        .results-panel {
+            grid-column: 1 / -1;
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #28a745;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .results-panel.show {
+            display: block;
+        }
+
+        .classification {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            margin: 5px;
+        }
+
+        .classification.summary {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .classification.table1 {
+            background-color: #cce7ff;
+            color: #004085;
+        }
+
+        .classification.table2 {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .classification.indictable {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .workflow-timeline {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .timeline-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border-left: 3px solid #2a5298;
+        }
+
+        .timeline-item .step {
+            background: #2a5298;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .timeline-item .content {
+            flex: 1;
+        }
+
+        .timeline-item .content h4 {
+            margin-bottom: 5px;
+            color: #1e3c72;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2a5298;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-indicator {
+            padding: 8px 15px;
+            border-radius: 5px;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .suggestions-list {
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            position: absolute;
+            width: 100%;
+            z-index: 1000;
+            display: none;
+        }
+
+        .suggestion-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s ease;
+        }
+
+        .suggestion-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .penalty-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .penalty-info h4 {
+            color: #1e3c72;
+            margin-bottom: 10px;
+        }
+
+        .documents-checklist {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid #dee2e6;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
+
+        .checklist-item input[type="checkbox"] {
+            margin-right: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .export-options {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .search-position {
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>NSW Criminal Law Legislative Intelligence System</h1>
+            <p>Automated procedural workflows and jurisdiction mapping for NSW criminal legislation</p>
+        </div>
+
+        <div class="main-content">
+            <!-- File Upload Section -->
+            <div class="panel">
+                <h2>📁 Legislation Files</h2>
+                
+                <div class="file-upload-area" id="fileUploadArea">
+                    <p><strong>Drop legislation files here or click to browse</strong></p>
+                    <p>Upload .txt legislation files (Criminal Procedure Act, Crimes Act, etc.)</p>
+                    <input type="file" id="fileInput" multiple accept=".txt" style="display: none;">
+                </div>
+
+                <div id="fileStatus"></div>
+                
+                <div class="form-group">
+                    <button class="btn" onclick="loadDefaultFiles()">Load Default Files</button>
+                    <button class="btn btn-secondary" onclick="clearFiles()">Clear All</button>
+                </div>
+            </div>
+
+            <!-- Search & Analysis Section -->
+            <div class="panel">
+                <h2>🔍 Charge Analysis</h2>
+                
+                <div class="search-section">
+                    <div class="search-position">
+                        <input type="text" 
+                               id="searchBox" 
+                               class="search-box" 
+                               placeholder="Enter section number (e.g., 61I, s.60, section 117) or charge description..."
+                               autocomplete="off">
+                        <div id="suggestionsList" class="suggestions-list"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="pleaSelect">Plea Status</label>
+                    <select id="pleaSelect">
+                        <option value="not_entered">No plea entered yet</option>
+                        <option value="guilty">Guilty plea</option>
+                        <option value="not_guilty">Not guilty plea</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="courtSelect">Preferred Court</label>
+                    <select id="courtSelect">
+                        <option value="auto">Auto-determine</option>
+                        <option value="local">Local Court</option>
+                        <option value="district">District Court</option>
+                        <option value="supreme">Supreme Court</option>
+                    </select>
+                </div>
+
+                <button class="btn" onclick="analyzeCharge()">Analyze Charge</button>
+                <button class="btn btn-success" onclick="generateWorkflow()">Generate Workflow</button>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div id="resultsPanel" class="results-panel">
+            <h2>📊 Analysis Results</h2>
+            <div id="resultsContent"></div>
+        </div>
+
+        <!-- Workflow Panel -->
+        <div id="workflowPanel" class="results-panel">
+            <h2>📋 Procedural Workflow</h2>
+            <div id="workflowContent"></div>
+            
+            <div class="export-options">
+                <h3>Export Options</h3>
+                <button class="btn btn-secondary" onclick="exportWorkflow('pdf')">Export as PDF</button>
+                <button class="btn btn-secondary" onclick="exportWorkflow('copy')">Copy to Clipboard</button>
+                <button class="btn btn-secondary" onclick="exportWorkflow('print')">Print Workflow</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Core Classes
+        class LegislativeProcessor {
+            constructor() {
+                this.sections = new Map();
+                this.penalties = new Map();
+                this.references = new Map();
+                this.sectionTitles = new Map();
+                this.acts = new Map();
+            }
+
+            async processLegislation(text, actName) {
+                console.log(`Processing ${actName}...`);
+                
+                // Extract all sections with flexible patterns
+                const sectionPatterns = [
+                    /^\s*(\d+[A-Z]*)\s+([^\n]+?)(?=\n|$)/gm,
+                    /(?:section|s\.?)\s*(\d+[A-Z]*)\s*[:\-]?\s*([^\n]+)/gi,
+                    /\b(\d+[A-Z]*)\s+([A-Z][^.\n]*?)(?=\s*\n|\s*$)/gm
+                ];
+
+                let sectionMatches = [];
+                
+                // Use multiple patterns to capture sections
+                sectionPatterns.forEach(pattern => {
+                    let match;
+                    while ((match = pattern.exec(text)) !== null) {
+                        sectionMatches.push({
+                            number: match[1],
+                            title: match[2].trim(),
+                            index: match.index
+                        });
+                    }
+                });
+
+                // Sort by position in text
+                sectionMatches.sort((a, b) => a.index - b.index);
+
+                // Extract section content and penalties
+                for (let i = 0; i < sectionMatches.length; i++) {
+                    const section = sectionMatches[i];
+                    const nextSection = sectionMatches[i + 1];
+                    
+                    const startIndex = section.index;
+                    const endIndex = nextSection ? nextSection.index : text.length;
+                    const sectionText = text.substring(startIndex, endIndex);
+                    
+                    const sectionData = {
+                        number: section.number,
+                        title: section.title,
+                        text: sectionText,
+                        act: actName,
+                        penalty: this.extractPenalty(sectionText)
+                    };
+
+                    this.sections.set(section.number, sectionData);
+                    this.sectionTitles.set(section.number, section.title);
+                    
+                    if (sectionData.penalty) {
+                        this.penalties.set(section.number, sectionData.penalty);
+                    }
+                }
+
+                // Extract cross-references
+                this.extractReferences(text, actName);
+                
+                this.acts.set(actName, {
+                    text: text,
+                    sectionCount: sectionMatches.length,
+                    processed: true
+                });
+
+                console.log(`Processed ${sectionMatches.length} sections from ${actName}`);
+                return sectionMatches.length;
+            }
+
+            extractSection(text, sectionNumber) {
+                // Clean section number
+                const cleanNumber = sectionNumber.replace(/^s\.?/i, '').trim();
+                
+                // Try exact match first
+                if (this.sections.has(cleanNumber)) {
+                    return this.sections.get(cleanNumber);
+                }
+
+                // Try alternative formats
+                const alternatives = [
+                    cleanNumber,
+                    cleanNumber.replace(/[A-Z]/g, ''),
+                    cleanNumber + 'A',
+                    cleanNumber + 'B'
+                ];
+
+                for (const alt of alternatives) {
+                    if (this.sections.has(alt)) {
+                        return this.sections.get(alt);
+                    }
+                }
+
+                // Search by content
+                const contentPattern = new RegExp(`\\b(?:section|s\\.?)\\s*${cleanNumber}\\b`, 'i');
+                for (const [key, section] of this.sections) {
+                    if (contentPattern.test(section.text) || section.title.includes(cleanNumber)) {
+                        return section;
+                    }
+                }
+
+                return null;
+            }
+
+            extractPenalty(sectionText) {
+                const penaltyPatterns = [
+                    /imprisonment for (?:not more than )?(\d+)\s*(years?|months?)/gi,
+                    /penalty of (\d+)\s*penalty units/gi,
+                    /fine of \$(\d+(?:,\d{3})*)/gi,
+                    /(\d+)\s*penalty units/gi,
+                    /maximum penalty[:\s]*(\d+(?:\.\d+)?)\s*(years?|months?)/gi,
+                    /(\d+)\s*years?\s*imprisonment/gi
+                ];
+
+                let penalty = {};
+                
+                penaltyPatterns.forEach(pattern => {
+                    let match;
+                    while ((match = pattern.exec(sectionText)) !== null) {
+                        if (match[0].includes('year')) {
+                            penalty.years = parseInt(match[1]);
+                        } else if (match[0].includes('month')) {
+                            penalty.months = parseInt(match[1]);
+                        } else if (match[0].includes('penalty unit')) {
+                            penalty.units = parseInt(match[1]);
+                        } else if (match[0].includes('fine') || match[0].includes('$')) {
+                            penalty.fine = parseInt(match[1].replace(/,/g, ''));
+                        }
+                    }
+                });
+
+                return Object.keys(penalty).length > 0 ? penalty : null;
+            }
+
+            extractReferences(text, actName) {
+                const referencePattern = /(?:section|s\.?)\s*(\d+[A-Z]*)/gi;
+                let match;
+                
+                while ((match = referencePattern.exec(text)) !== null) {
+                    const sectionNumber = match[1];
+                    if (!this.references.has(sectionNumber)) {
+                        this.references.set(sectionNumber, new Set());
+                    }
+                    this.references.get(sectionNumber).add(actName);
+                }
+            }
+
+            buildSynonymMap() {
+                const synonyms = new Map();
+                
+                for (const [section, title] of this.sectionTitles) {
+                    // Extract key terms from titles
+                    const terms = title.toLowerCase()
+                        .replace(/[^\w\s]/g, ' ')
+                        .split(/\s+/)
+                        .filter(term => term.length > 3);
+                    
+                    terms.forEach(term => {
+                        if (!synonyms.has(term)) {
+                            synonyms.set(term, new Set());
+                        }
+                        synonyms.get(term).add(section);
+                    });
+                }
+                
+                return synonyms;
+            }
+        }
+
+        class ScheduleClassifier {
+            constructor() {
+                this.table1 = new Set();
+                this.table2 = new Set();
+                this.table1Details = new Map();
+                this.table2Details = new Map();
+                this.strictlyIndictable = new Set();
+            }
+
+            parseSchedule1(scheduleText) {
+                console.log('Parsing Schedule 1...');
+                
+                // Extract Table 1 sections
+                const table1Match = scheduleText.match(/Table 1.*?(?=Table 2|$)/s);
+                if (table1Match) {
+                    this.parseTable(table1Match[0], this.table1, this.table1Details, 'Table 1');
+                }
+
+                // Extract Table 2 sections
+                const table2Match = scheduleText.match(/Table 2.*?(?=Schedule 2|$)/s);
+                if (table2Match) {
+                    this.parseTable(table2Match[0], this.table2, this.table2Details, 'Table 2');
+                }
+
+                console.log(`Table 1: ${this.table1.size} entries, Table 2: ${this.table2.size} entries`);
+            }
+
+            parseTable(tableText, targetSet, targetMap, tableName) {
+                // Extract section references from various patterns
+                const patterns = [
+                    /section (\d+[A-Z]*)/gi,
+                    /\b(\d+[A-Z]*)\s*\([^)]*\)/g,
+                    /under section (\d+[A-Z]*)/gi,
+                    /\b(\d+[A-Z]*)\s+of the Crimes Act/gi
+                ];
+
+                patterns.forEach(pattern => {
+                    let match;
+                    while ((match = pattern.exec(tableText)) !== null) {
+                        const section = match[1];
+                        targetSet.add(section);
+                        
+                        // Store context for this section
+                        const context = this.extractSectionContext(tableText, match.index);
+                        targetMap.set(section, {
+                            table: tableName,
+                            context: context,
+                            valueThreshold: this.extractValueThreshold(context)
+                        });
+                    }
+                });
+
+                // Special handling for range patterns like "60 (2) or (2A)"
+                const rangePattern = /(\d+[A-Z]*)\s*\(([^)]+)\)/g;
+                let rangeMatch;
+                while ((rangeMatch = rangePattern.exec(tableText)) !== null) {
+                    const baseSection = rangeMatch[1];
+                    const subsections = rangeMatch[2].split(/\s*(?:or|,)\s*/);
+                    
+                    subsections.forEach(sub => {
+                        const fullSection = `${baseSection}(${sub.trim()})`;
+                        targetSet.add(fullSection);
+                        targetSet.add(baseSection); // Also add base section
+                    });
+                }
+            }
+
+            extractSectionContext(text, index) {
+                const start = Math.max(0, index - 200);
+                const end = Math.min(text.length, index + 200);
+                return text.substring(start, end).trim();
+            }
+
+            extractValueThreshold(context) {
+                const valueMatch = context.match(/\$(\d+(?:,\d{3})*)/);
+                return valueMatch ? parseInt(valueMatch[1].replace(/,/g, '')) : null;
+            }
+
+            classifyOffence(sectionNumber, penaltyData, chargeValue = 0) {
+                // Clean section number for comparison
+                const cleanSection = sectionNumber.replace(/^s\.?/i, '').trim();
+                
+                // Check Table 1 (both parties can elect)
+                if (this.table1.has(cleanSection)) {
+                    const details = this.table1Details.get(cleanSection);
+                    if (details && details.valueThreshold && chargeValue < details.valueThreshold) {
+                        return {
+                            classification: 'Table 2',
+                            court: 'Local Court',
+                            election: 'Prosecution election only',
+                            note: `Value under $${details.valueThreshold.toLocaleString()}`
+                        };
+                    }
+                    return {
+                        classification: 'Table 1',
+                        court: 'Local Court (unless elected)',
+                        election: 'Either party can elect for indictment'
+                    };
+                }
+
+                // Check Table 2 (prosecution election only)
+                if (this.table2.has(cleanSection)) {
+                    return {
+                        classification: 'Table 2',
+                        court: 'Local Court (unless prosecution elects)',
+                        election: 'Prosecution can elect for indictment'
+                    };
+                }
+
+                // Check for strictly indictable based on penalty
+                if (penaltyData) {
+                    const maxPenalty = this.calculateMaxPenalty(penaltyData);
+                    if (maxPenalty > 5) { // More than 5 years typically indictable only
+                        return {
+                            classification: 'Strictly Indictable',
+                            court: 'District/Supreme Court',
+                            election: 'Must proceed on indictment'
+                        };
+                    }
+                }
+
+                // Default to summary for unknown offences with low penalties
+                return {
+                    classification: 'Summary',
+                    court: 'Local Court',
+                    election: 'Summary jurisdiction only'
+                };
+            }
+
+            calculateMaxPenalty(penalty) {
+                let years = 0;
+                if (penalty.years) years += penalty.years;
+                if (penalty.months) years += penalty.months / 12;
+                return years;
+            }
+        }
+
+        class LegalSearch {
+            constructor() {
+                this.searchIndex = new Map();
+                this.conceptMap = new Map();
+                this.synonyms = new Map();
+            }
+
+            buildSearchIndex(processor) {
+                console.log('Building search index...');
+                
+                // Index all sections
+                for (const [sectionNumber, sectionData] of processor.sections) {
+                    const searchableText = [
+                        sectionNumber,
+                        sectionData.title,
+                        sectionData.text
+                    ].join(' ').toLowerCase();
+
+                    // Create searchable terms
+                    const terms = searchableText
+                        .replace(/[^\w\s]/g, ' ')
+                        .split(/\s+/)
+                        .filter(term => term.length > 2);
+
+                    terms.forEach(term => {
+                        if (!this.searchIndex.has(term)) {
+                            this.searchIndex.set(term, new Set());
+                        }
+                        this.searchIndex.get(term).add(sectionNumber);
+                    });
+
+                    // Index by section number patterns
+                    const sectionPatterns = [
+                        sectionNumber,
+                        `s${sectionNumber}`,
+                        `s.${sectionNumber}`,
+                        `section${sectionNumber}`,
+                        `section ${sectionNumber}`
+                    ];
+
+                    sectionPatterns.forEach(pattern => {
+                        this.searchIndex.set(pattern.toLowerCase(), new Set([sectionNumber]));
+                    });
+                }
+
+                this.buildConceptMap(processor);
+            }
+
+            buildConceptMap(processor) {
+                // Build concept relationships
+                const concepts = {
+                    'assault': ['60', '59', '61', '58'],
+                    'sexual': ['61I', '61J', '61KC', '61KD'],
+                    'theft': ['117', '118', '119', '125'],
+                    'fraud': ['178', '179', '180'],
+                    'drug': ['25', '25A', '25B'],
+                    'traffic': ['52A', '52B', '53'],
+                    'weapon': ['33B', '93', '94'],
+                    'domestic': ['13', '14', '54D']
+                };
+
+                for (const [concept, sections] of Object.entries(concepts)) {
+                    this.conceptMap.set(concept, new Set(sections));
+                }
+            }
+
+            search(query) {
+                const results = new Set();
+                const searchTerms = query.toLowerCase()
+                    .replace(/[^\w\s]/g, ' ')
+                    .split(/\s+/)
+                    .filter(term => term.length > 1);
+
+                // Direct section number search
+                const sectionMatch = query.match(/\b(\d+[A-Z]*)\b/);
+                if (sectionMatch) {
+                    const section = sectionMatch[1];
+                    if (this.searchIndex.has(section.toLowerCase())) {
+                        this.searchIndex.get(section.toLowerCase()).forEach(sec => results.add(sec));
+                    }
+                }
+
+                // Term-based search
+                searchTerms.forEach(term => {
+                    if (this.searchIndex.has(term)) {
+                        this.searchIndex.get(term).forEach(section => results.add(section));
+                    }
+                });
+
+                // Concept search
+                searchTerms.forEach(term => {
+                    if (this.conceptMap.has(term)) {
+                        this.conceptMap.get(term).forEach(section => results.add(section));
+                    }
+                });
+
+                return Array.from(results);
+            }
+
+            getSuggestions(query) {
+                if (query.length < 2) return [];
+
+                const suggestions = [];
+                const queryLower = query.toLowerCase();
+
+                // Section number suggestions
+                const sectionPattern = /\d+[A-Z]*/;
+                if (sectionPattern.test(query)) {
+                    for (const [section, data] of legislativeSystem.processor.sections) {
+                        if (section.toLowerCase().includes(queryLower)) {
+                            suggestions.push({
+                                type: 'section',
+                                text: `Section ${section} - ${data.title}`,
+                                value: section
+                            });
+                        }
+                    }
+                }
+
+                // Title-based suggestions
+                for (const [section, title] of legislativeSystem.processor.sectionTitles) {
+                    if (title.toLowerCase().includes(queryLower)) {
+                        suggestions.push({
+                            type: 'title',
+                            text: `${title} (s.${section})`,
+                            value: section
+                        });
+                    }
+                }
+
+                return suggestions.slice(0, 10);
+            }
+        }
+
+        class WorkflowEngine {
+            constructor() {
+                this.procedureTemplates = new Map();
+                this.initializeTemplates();
+            }
+
+            initializeTemplates() {
+                // Summary procedure template
+                this.procedureTemplates.set('summary', {
+                    guilty: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: 'Initial court date', mandatory: true },
+                        { step: 2, task: 'Enter guilty plea', deadline: 'Same day', mandatory: true },
+                        { step: 3, task: 'Facts read by prosecution', deadline: 'Same day', mandatory: true },
+                        { step: 4, task: 'Submissions on penalty', deadline: 'Same day', mandatory: true },
+                        { step: 5, task: 'Sentence imposed', deadline: 'Same day or adjourned', mandatory: true }
+                    ],
+                    not_guilty: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: 'Initial court date', mandatory: true },
+                        { step: 2, task: 'Enter not guilty plea', deadline: 'Same day', mandatory: true },
+                        { step: 3, task: 'Request/receive brief of evidence', deadline: '4 weeks', mandatory: true },
+                        { step: 4, task: 'Review brief and prepare defence', deadline: '8 weeks', mandatory: true },
+                        { step: 5, task: 'Hearing date listed', deadline: '12-16 weeks', mandatory: true },
+                        { step: 6, task: 'Local Court hearing', deadline: 'As listed', mandatory: true }
+                    ]
+                });
+
+                // Table 1 procedure template
+                this.procedureTemplates.set('table1', {
+                    guilty: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: 'Initial court date', mandatory: true },
+                        { step: 2, task: 'Consider election rights', deadline: 'Same day', mandatory: true },
+                        { step: 3, task: 'Enter guilty plea (if no election)', deadline: 'Same day or adjourned', mandatory: true },
+                        { step: 4, task: 'Sentence in Local Court or committal for sentence', deadline: 'Same day or adjourned', mandatory: true }
+                    ],
+                    not_guilty: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: 'Initial court date', mandatory: true },
+                        { step: 2, task: 'Consider election rights', deadline: 'Before plea', mandatory: true },
+                        { step: 3, task: 'Make election decision (if any)', deadline: 'Within time allowed', mandatory: false },
+                        { step: 4, task: 'Enter not guilty plea', deadline: 'After election period', mandatory: true },
+                        { step: 5, task: 'Brief of evidence served', deadline: '6 weeks', mandatory: true },
+                        { step: 6, task: 'Defence preparation', deadline: '10 weeks', mandatory: true },
+                        { step: 7, task: 'Hearing (Local Court or committal)', deadline: '16-20 weeks', mandatory: true }
+                    ]
+                });
+
+                // Table 2 procedure template
+                this.procedureTemplates.set('table2', {
+                    guilty: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: 'Initial court date', mandatory: true },
+                        { step: 2, task: 'Prosecution considers election', deadline: 'Before plea', mandatory: true },
+                        { step: 3, task: 'Enter guilty plea (if no election)', deadline: 'Same day or adjourned', mandatory: true },
+                        { step: 4, task: 'Sentence in Local Court', deadline: 'Same day or adjourned', mandatory: true }
+                    ],
+                    not_guilty: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: 'Initial court date', mandatory: true },
+                        { step: 2, task: 'Prosecution election period', deadline: 'Within time allowed', mandatory: true },
+                        { step: 3, task: 'Enter not guilty plea', deadline: 'After election period', mandatory: true },
+                        { step: 4, task: 'Brief of evidence served', deadline: '6 weeks', mandatory: true },
+                        { step: 5, task: 'Defence preparation', deadline: '10 weeks', mandatory: true },
+                        { step: 6, task: 'Hearing in Local Court', deadline: '16-20 weeks', mandatory: true }
+                    ]
+                });
+
+                // Indictable procedure template
+                this.procedureTemplates.set('indictable', {
+                    guilty: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: 'Initial court date', mandatory: true },
+                        { step: 2, task: 'Committal proceedings', deadline: '8-12 weeks', mandatory: true },
+                        { step: 3, task: 'Committal for sentence', deadline: 'After committal', mandatory: true },
+                        { step: 4, task: 'Sentence in higher court', deadline: '4-8 weeks after committal', mandatory: true }
+                    ],
+                    not_guilty: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: 'Initial court date', mandatory: true },
+                        { step: 2, task: 'Brief of evidence served', deadline: '6 weeks', mandatory: true },
+                        { step: 3, task: 'Case conference (if required)', deadline: '8 weeks', mandatory: false },
+                        { step: 4, task: 'Committal proceedings', deadline: '12-16 weeks', mandatory: true },
+                        { step: 5, task: 'Committal for trial', deadline: 'If case to answer', mandatory: true },
+                        { step: 6, task: 'Trial preparation', deadline: '12-20 weeks', mandatory: true },
+                        { step: 7, task: 'Trial in higher court', deadline: 'As listed', mandatory: true }
+                    ]
+                });
+            }
+
+            generateWorkflow(chargeInfo, plea, court = 'auto') {
+                const classification = chargeInfo.classification.toLowerCase().replace(' ', '');
+                const pleaKey = plea === 'guilty' ? 'guilty' : 'not_guilty';
+                
+                let templateKey;
+                if (classification.includes('table1')) {
+                    templateKey = 'table1';
+                } else if (classification.includes('table2')) {
+                    templateKey = 'table2';
+                } else if (classification.includes('indictable')) {
+                    templateKey = 'indictable';
+                } else {
+                    templateKey = 'summary';
+                }
+
+                const template = this.procedureTemplates.get(templateKey);
+                if (!template || !template[pleaKey]) {
+                    return this.generateFallbackWorkflow(chargeInfo, plea);
+                }
+
+                const steps = template[pleaKey];
+                const workflow = {
+                    classification: chargeInfo.classification,
+                    plea: plea,
+                    court: chargeInfo.court,
+                    steps: steps.map(step => ({
+                        ...step,
+                        deadline: this.calculateDeadline(step.deadline)
+                    })),
+                    documents: this.generateDocumentList(templateKey, pleaKey),
+                    notes: this.generatePracticeNotes(chargeInfo)
+                };
+
+                return workflow;
+            }
+
+            calculateDeadline(deadlineText) {
+                const now = new Date();
+                
+                if (deadlineText.includes('weeks')) {
+                    const weeks = parseInt(deadlineText.match(/(\d+)/)?.[1] || '0');
+                    const deadline = new Date(now);
+                    deadline.setDate(deadline.getDate() + (weeks * 7));
+                    return {
+                        text: deadlineText,
+                        date: deadline.toLocaleDateString(),
+                        daysFromNow: weeks * 7
+                    };
+                } else if (deadlineText.includes('Same day')) {
+                    return {
+                        text: deadlineText,
+                        date: now.toLocaleDateString(),
+                        daysFromNow: 0
+                    };
+                }
+                
+                return {
+                    text: deadlineText,
+                    date: 'TBD',
+                    daysFromNow: null
+                };
+            }
+
+            generateDocumentList(templateKey, pleaKey) {
+                const baseDocuments = [
+                    { name: 'Court Attendance Notice', required: true, deadline: 'Before first appearance' },
+                    { name: 'Criminal record (if applicable)', required: false, deadline: 'Before sentencing' }
+                ];
+
+                if (pleaKey === 'not_guilty') {
+                    baseDocuments.push(
+                        { name: 'Brief of evidence', required: true, deadline: 'As per court order' },
+                        { name: 'Defence response (if required)', required: false, deadline: 'Within time specified' }
+                    );
+                }
+
+                if (templateKey === 'indictable' || templateKey === 'table1') {
+                    baseDocuments.push(
+                        { name: 'Election notice (if applicable)', required: false, deadline: 'Within election period' }
+                    );
+                }
+
+                if (templateKey === 'indictable') {
+                    baseDocuments.push(
+                        { name: 'Case conference certificate', required: false, deadline: 'Before committal' },
+                        { name: 'Committal bundle', required: true, deadline: 'For committal proceedings' }
+                    );
+                }
+
+                return baseDocuments;
+            }
+
+            generatePracticeNotes(chargeInfo) {
+                const notes = [];
+                
+                if (chargeInfo.classification.includes('Table 1')) {
+                    notes.push('Both prosecution and defence can elect for the matter to proceed on indictment.');
+                    notes.push('Consider the advantages/disadvantages of Local Court vs higher court jurisdiction.');
+                }
+                
+                if (chargeInfo.classification.includes('Table 2')) {
+                    notes.push('Only the prosecution can elect for the matter to proceed on indictment.');
+                    notes.push('Defence should prepare for Local Court jurisdiction unless prosecution elects otherwise.');
+                }
+                
+                if (chargeInfo.penalty) {
+                    if (chargeInfo.penalty.years >= 2) {
+                        notes.push('Serious penalty - consider all mitigating factors and character references.');
+                    }
+                    notes.push(`Maximum penalty: ${this.formatPenalty(chargeInfo.penalty)}`);
+                }
+                
+                return notes;
+            }
+
+            formatPenalty(penalty) {
+                const parts = [];
+                if (penalty.years) parts.push(`${penalty.years} year${penalty.years > 1 ? 's' : ''} imprisonment`);
+                if (penalty.months) parts.push(`${penalty.months} month${penalty.months > 1 ? 's' : ''} imprisonment`);
+                if (penalty.units) parts.push(`${penalty.units} penalty units`);
+                if (penalty.fine) parts.push(`$${penalty.fine.toLocaleString()} fine`);
+                return parts.join(' or ');
+            }
+
+            generateFallbackWorkflow(chargeInfo, plea) {
+                return {
+                    classification: chargeInfo.classification,
+                    plea: plea,
+                    court: chargeInfo.court,
+                    steps: [
+                        { step: 1, task: 'First appearance in Local Court', deadline: { text: 'Initial court date', date: 'TBD', daysFromNow: null }, mandatory: true },
+                        { step: 2, task: 'Enter plea', deadline: { text: 'Same day or adjourned', date: 'TBD', daysFromNow: null }, mandatory: true },
+                        { step: 3, task: 'Proceed according to standard procedure', deadline: { text: 'As directed by court', date: 'TBD', daysFromNow: null }, mandatory: true }
+                    ],
+                    documents: [
+                        { name: 'Court Attendance Notice', required: true, deadline: 'Before first appearance' }
+                    ],
+                    notes: ['Standard procedure applies - consult current legislation and court rules.']
+                };
+            }
+        }
+
+        // Global system instance
+        class LegislativeSystem {
+            constructor() {
+                this.processor = new LegislativeProcessor();
+                this.classifier = new ScheduleClassifier();
+                this.search = new LegalSearch();
+                this.workflow = new WorkflowEngine();
+                this.loaded = false;
+            }
+
+            async initialize() {
+                try {
+                    await this.loadDefaultFiles();
+                    this.loaded = true;
+                    updateStatus('System initialized successfully', 'success');
+                } catch (error) {
+                    console.error('Initialization error:', error);
+                    updateStatus('Failed to initialize system: ' + error.message, 'error');
+                }
+            }
+
+            async loadDefaultFiles() {
+                try {
+                    updateStatus('Loading default legislation files...', 'loading');
+                    
+                    // Load Criminal Procedure Act
+                    const cpaResponse = await fetch('./cpa1986188.txt');
+                    if (cpaResponse.ok) {
+                        const cpaText = await cpaResponse.text();
+                        await this.processor.processLegislation(cpaText, 'Criminal Procedure Act 1986');
+                        
+                        // Parse Schedule 1 for classification
+                        const scheduleMatch = cpaText.match(/Schedule 1.*$/s);
+                        if (scheduleMatch) {
+                            this.classifier.parseSchedule1(scheduleMatch[0]);
+                        }
+                    }
+                    
+                    // Load Crimes Act
+                    const crimesResponse = await fetch('./ca190082.txt');
+                    if (crimesResponse.ok) {
+                        const crimesText = await crimesResponse.text();
+                        await this.processor.processLegislation(crimesText, 'Crimes Act 1900');
+                    }
+                    
+                    // Build search index
+                    this.search.buildSearchIndex(this.processor);
+                    
+                    updateStatus(`Loaded ${this.processor.sections.size} sections from legislation files`, 'success');
+                    
+                } catch (error) {
+                    console.error('Error loading files:', error);
+                    updateStatus('Error loading default files: ' + error.message, 'error');
+                }
+            }
+        }
+
+        // Global instance
+        const legislativeSystem = new LegislativeSystem();
+
+        // UI Functions
+        function updateStatus(message, type) {
+            const statusDiv = document.getElementById('fileStatus');
+            statusDiv.innerHTML = `<div class="status-indicator status-${type}">${message}</div>`;
+        }
+
+        function updateSuggestions(query) {
+            const suggestionsList = document.getElementById('suggestionsList');
+            
+            if (query.length < 2) {
+                suggestionsList.style.display = 'none';
+                return;
+            }
+
+            const suggestions = legislativeSystem.search.getSuggestions(query);
+            
+            if (suggestions.length === 0) {
+                suggestionsList.style.display = 'none';
+                return;
+            }
+
+            suggestionsList.innerHTML = suggestions.map(suggestion => 
+                `<div class="suggestion-item" onclick="selectSuggestion('${suggestion.value}')">${suggestion.text}</div>`
+            ).join('');
+            
+            suggestionsList.style.display = 'block';
+        }
+
+        function selectSuggestion(value) {
+            document.getElementById('searchBox').value = value;
+            document.getElementById('suggestionsList').style.display = 'none';
+            analyzeCharge();
+        }
+
+        async function loadDefaultFiles() {
+            if (!legislativeSystem.loaded) {
+                await legislativeSystem.initialize();
+            } else {
+                updateStatus('Default files already loaded', 'success');
+            }
+        }
+
+        function clearFiles() {
+            legislativeSystem.processor = new LegislativeProcessor();
+            legislativeSystem.classifier = new ScheduleClassifier();
+            legislativeSystem.search = new LegalSearch();
+            legislativeSystem.loaded = false;
+            updateStatus('Files cleared', 'warning');
+            document.getElementById('resultsPanel').classList.remove('show');
+            document.getElementById('workflowPanel').classList.remove('show');
+        }
+
+        function analyzeCharge() {
+            const query = document.getElementById('searchBox').value.trim();
+            if (!query) {
+                alert('Please enter a section number or charge description');
+                return;
+            }
+
+            if (!legislativeSystem.loaded) {
+                updateStatus('Please load legislation files first', 'error');
+                return;
+            }
+
+            // Search for the section
+            const results = legislativeSystem.search.search(query);
+            
+            if (results.length === 0) {
+                displayResults({
+                    query: query,
+                    found: false,
+                    message: 'No matching sections found. The charge may be summary only or from legislation not yet loaded.'
+                });
+                return;
+            }
+
+            // Use the first result
+            const sectionNumber = results[0];
+            const sectionData = legislativeSystem.processor.extractSection('', sectionNumber);
+            
+            if (!sectionData) {
+                displayResults({
+                    query: query,
+                    found: false,
+                    message: 'Section found but details not available.'
+                });
+                return;
+            }
+
+            // Classify the offence
+            const classification = legislativeSystem.classifier.classifyOffence(
+                sectionNumber, 
+                sectionData.penalty
+            );
+
+            const chargeInfo = {
+                section: sectionNumber,
+                title: sectionData.title,
+                act: sectionData.act,
+                penalty: sectionData.penalty,
+                classification: classification.classification,
+                court: classification.court,
+                election: classification.election,
+                note: classification.note
+            };
+
+            displayResults({
+                query: query,
+                found: true,
+                chargeInfo: chargeInfo,
+                relatedSections: results.slice(1, 4)
+            });
+        }
+
+        function displayResults(results) {
+            const resultsPanel = document.getElementById('resultsPanel');
+            const resultsContent = document.getElementById('resultsContent');
+            
+            if (!results.found) {
+                resultsContent.innerHTML = `
+                    <div class="status-error">
+                        <h3>No Results Found</h3>
+                        <p><strong>Search:</strong> ${results.query}</p>
+                        <p>${results.message}</p>
+                    </div>
+                `;
+                resultsPanel.classList.add('show');
+                return;
+            }
+
+            const charge = results.chargeInfo;
+            const classificationClass = charge.classification.toLowerCase().replace(' ', '');
+            
+            resultsContent.innerHTML = `
+                <div class="charge-summary">
+                    <h3>${charge.act} - Section ${charge.section}</h3>
+                    <h4>${charge.title}</h4>
+                    
+                    <div class="classification ${classificationClass}">${charge.classification}</div>
+                    
+                    <div class="penalty-info">
+                        <h4>Maximum Penalty</h4>
+                        <p>${charge.penalty ? legislativeSystem.workflow.formatPenalty(charge.penalty) : 'Not specified'}</p>
+                    </div>
+                    
+                    <div class="jurisdiction-info">
+                        <h4>Jurisdiction</h4>
+                        <p><strong>Court:</strong> ${charge.court}</p>
+                        <p><strong>Election Rights:</strong> ${charge.election}</p>
+                        ${charge.note ? `<p><strong>Note:</strong> ${charge.note}</p>` : ''}
+                    </div>
+                    
+                    ${results.relatedSections.length > 0 ? `
+                        <div class="related-sections">
+                            <h4>Related Sections</h4>
+                            <p>${results.relatedSections.join(', ')}</p>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            resultsPanel.classList.add('show');
+            
+            // Store charge info for workflow generation
+            window.currentChargeInfo = charge;
+        }
+
+        function generateWorkflow() {
+            if (!window.currentChargeInfo) {
+                alert('Please analyze a charge first');
+                return;
+            }
+
+            const plea = document.getElementById('pleaSelect').value;
+            const court = document.getElementById('courtSelect').value;
+            
+            const workflow = legislativeSystem.workflow.generateWorkflow(
+                window.currentChargeInfo, 
+                plea, 
+                court
+            );
+
+            displayWorkflow(workflow);
+        }
+
+        function displayWorkflow(workflow) {
+            const workflowPanel = document.getElementById('workflowPanel');
+            const workflowContent = document.getElementById('workflowContent');
+            
+            const pleaText = workflow.plea === 'guilty' ? 'Guilty Plea' : 
+                           workflow.plea === 'not_guilty' ? 'Not Guilty Plea' : 'No Plea Yet';
+            
+            workflowContent.innerHTML = `
+                <div class="workflow-summary">
+                    <h3>Procedural Workflow</h3>
+                    <p><strong>Classification:</strong> ${workflow.classification}</p>
+                    <p><strong>Plea:</strong> ${pleaText}</p>
+                    <p><strong>Court:</strong> ${workflow.court}</p>
+                </div>
+                
+                <div class="workflow-timeline">
+                    <h4>Procedural Steps</h4>
+                    ${workflow.steps.map(step => `
+                        <div class="timeline-item">
+                            <div class="step">${step.step}</div>
+                            <div class="content">
+                                <h4>${step.task}</h4>
+                                <p><strong>Deadline:</strong> ${step.deadline.text}</p>
+                                ${step.deadline.date !== 'TBD' ? `<p><strong>Date:</strong> ${step.deadline.date}</p>` : ''}
+                                ${step.mandatory ? '<span class="classification summary">Mandatory</span>' : '<span class="classification table2">Optional</span>'}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <div class="documents-checklist">
+                    <h4>Required Documents</h4>
+                    ${workflow.documents.map(doc => `
+                        <div class="checklist-item">
+                            <input type="checkbox" id="doc-${doc.name.replace(/\s/g, '')}" ${doc.required ? 'required' : ''}>
+                            <label for="doc-${doc.name.replace(/\s/g, '')}">${doc.name} ${doc.required ? '(Required)' : '(Optional)'}</label>
+                            <small>Deadline: ${doc.deadline}</small>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <div class="practice-notes">
+                    <h4>Practice Notes</h4>
+                    <ul>
+                        ${workflow.notes.map(note => `<li>${note}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+            
+            workflowPanel.classList.add('show');
+            
+            // Store workflow for export
+            window.currentWorkflow = workflow;
+        }
+
+        function exportWorkflow(format) {
+            if (!window.currentWorkflow) {
+                alert('Please generate a workflow first');
+                return;
+            }
+
+            const workflow = window.currentWorkflow;
+            
+            switch (format) {
+                case 'copy':
+                    exportToClipboard(workflow);
+                    break;
+                case 'print':
+                    exportToPrint(workflow);
+                    break;
+                case 'pdf':
+                    alert('PDF export would require a PDF library - implementing print instead');
+                    exportToPrint(workflow);
+                    break;
+                default:
+                    alert('Export format not supported yet');
+            }
+        }
+
+        function exportToClipboard(workflow) {
+            const text = `
+NSW Criminal Law Procedural Workflow
+
+Classification: ${workflow.classification}
+Court: ${workflow.court}
+Plea: ${workflow.plea}
+
+Procedural Steps:
+${workflow.steps.map(step => `${step.step}. ${step.task} (Deadline: ${step.deadline.text})`).join('\n')}
+
+Required Documents:
+${workflow.documents.map(doc => `- ${doc.name} ${doc.required ? '(Required)' : '(Optional)'} - ${doc.deadline}`).join('\n')}
+
+Practice Notes:
+${workflow.notes.map(note => `- ${note}`).join('\n')}
+
+Generated by NSW Criminal Law Legislative Intelligence System
+            `.trim();
+
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Workflow copied to clipboard!');
+            }).catch(() => {
+                alert('Failed to copy to clipboard');
+            });
+        }
+
+        function exportToPrint(workflow) {
+            const printContent = document.getElementById('workflowContent').innerHTML;
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>NSW Criminal Law Workflow</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        .timeline-item { margin: 15px 0; padding: 10px; border-left: 3px solid #2a5298; }
+                        .step { background: #2a5298; color: white; width: 25px; height: 25px; border-radius: 50%; display: inline-block; text-align: center; line-height: 25px; margin-right: 10px; }
+                        .classification { padding: 4px 8px; border-radius: 10px; font-size: 12px; }
+                        .classification.summary { background: #d4edda; color: #155724; }
+                        .checklist-item { margin: 8px 0; }
+                        @media print { body { margin: 0; } }
+                    </style>
+                </head>
+                <body>
+                    <h1>NSW Criminal Law Procedural Workflow</h1>
+                    ${printContent}
+                    <hr>
+                    <p><small>Generated by NSW Criminal Law Legislative Intelligence System</small></p>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // File upload functionality
+            const fileUploadArea = document.getElementById('fileUploadArea');
+            const fileInput = document.getElementById('fileInput');
+
+            fileUploadArea.addEventListener('click', () => fileInput.click());
+            
+            fileUploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                fileUploadArea.classList.add('dragover');
+            });
+
+            fileUploadArea.addEventListener('dragleave', () => {
+                fileUploadArea.classList.remove('dragover');
+            });
+
+            fileUploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                fileUploadArea.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+
+            // Search functionality
+            const searchBox = document.getElementById('searchBox');
+            let searchTimeout;
+
+            searchBox.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    updateSuggestions(e.target.value);
+                }, 300);
+            });
+
+            searchBox.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    analyzeCharge();
+                    document.getElementById('suggestionsList').style.display = 'none';
+                } else if (e.key === 'Escape') {
+                    document.getElementById('suggestionsList').style.display = 'none';
+                }
+            });
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.search-position')) {
+                    document.getElementById('suggestionsList').style.display = 'none';
+                }
+            });
+
+            // Initialize system
+            updateStatus('System ready - click "Load Default Files" to begin', 'warning');
+        });
+
+        async function handleFiles(files) {
+            updateStatus('Processing uploaded files...', 'loading');
+            
+            for (const file of files) {
+                if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+                    try {
+                        const text = await file.text();
+                        const actName = file.name.replace('.txt', '').replace(/[_-]/g, ' ');
+                        await legislativeSystem.processor.processLegislation(text, actName);
+                        
+                        // If it's a Criminal Procedure Act file, parse Schedule 1
+                        if (file.name.toLowerCase().includes('cpa') || actName.toLowerCase().includes('criminal procedure')) {
+                            const scheduleMatch = text.match(/Schedule 1.*$/s);
+                            if (scheduleMatch) {
+                                legislativeSystem.classifier.parseSchedule1(scheduleMatch[0]);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error processing file:', error);
+                        updateStatus(`Error processing ${file.name}: ${error.message}`, 'error');
+                        return;
+                    }
+                }
+            }
+            
+            // Rebuild search index
+            legislativeSystem.search.buildSearchIndex(legislativeSystem.processor);
+            legislativeSystem.loaded = true;
+            
+            updateStatus(`Successfully processed ${files.length} file(s). System ready.`, 'success');
+        }
+    </script>
+</body>
+</html>
