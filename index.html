@@ -452,6 +452,13 @@
             margin: 5px 0;
             font-weight: 500;
         }
+
+        .search-help {
+            margin-top: 8px;
+            color: #666;
+            font-style: italic;
+            line-height: 1.4;
+        }
     </style>
 </head>
 <body>
@@ -490,10 +497,11 @@
                         <input type="text" 
                                id="searchBox" 
                                class="search-box" 
-                               placeholder="Enter section number (e.g., 61I, s.60, section 117) or charge description..."
+                               placeholder="Enter Crimes Act section (e.g., 61I, s.60, section 117) or offence description..."
                                autocomplete="off">
                         <div id="suggestionsList" class="suggestions-list"></div>
                     </div>
+                    <p class="search-help"><small><strong>Note:</strong> Search finds criminal offences from the Crimes Act 1900. The system automatically checks Schedule 1 of the Criminal Procedure Act 1986 for classification.</small></p>
                 </div>
 
                 <div class="form-group">
@@ -620,12 +628,13 @@
                 // Clean section number
                 const cleanNumber = sectionNumber.replace(/^s\.?/i, '').trim();
                 
-                // Try exact match first
-                if (this.sections.has(cleanNumber)) {
-                    return this.sections.get(cleanNumber);
+                // PRIORITIZE CRIMES ACT sections - look for Crimes Act match first
+                const crimesActSection = this.findSectionInAct(cleanNumber, 'Crimes Act');
+                if (crimesActSection) {
+                    return crimesActSection;
                 }
-
-                // Try alternative formats
+                
+                // If no Crimes Act section found, try alternatives in Crimes Act
                 const alternatives = [
                     cleanNumber,
                     cleanNumber.replace(/[A-Z]/g, ''),
@@ -634,19 +643,30 @@
                 ];
 
                 for (const alt of alternatives) {
-                    if (this.sections.has(alt)) {
-                        return this.sections.get(alt);
+                    const crimesSection = this.findSectionInAct(alt, 'Crimes Act');
+                    if (crimesSection) {
+                        return crimesSection;
                     }
                 }
 
-                // Search by content
+                // Last resort - search by content in Crimes Act only
                 const contentPattern = new RegExp(`\\b(?:section|s\\.?)\\s*${cleanNumber}\\b`, 'i');
                 for (const [key, section] of this.sections) {
-                    if (contentPattern.test(section.text) || section.title.includes(cleanNumber)) {
+                    if (section.act.includes('Crimes Act') && 
+                        (contentPattern.test(section.text) || section.title.includes(cleanNumber))) {
                         return section;
                     }
                 }
 
+                return null;
+            }
+
+            findSectionInAct(sectionNumber, actName) {
+                for (const [key, section] of this.sections) {
+                    if (key === sectionNumber && section.act.includes(actName)) {
+                        return section;
+                    }
+                }
                 return null;
             }
 
@@ -1318,44 +1338,53 @@
             }
 
             buildSearchIndex(processor) {
-                console.log('Building search index...');
+                console.log('Building search index - focusing on Crimes Act sections only...');
                 
-                // Index all sections
+                // Index ONLY Crimes Act sections (not Criminal Procedure Act)
                 for (const [sectionNumber, sectionData] of processor.sections) {
-                    const searchableText = [
-                        sectionNumber,
-                        sectionData.title,
-                        sectionData.text
-                    ].join(' ').toLowerCase();
+                    // Skip Criminal Procedure Act sections - we only want to search Crimes Act
+                    if (sectionData.act.includes('Criminal Procedure Act')) {
+                        continue;
+                    }
+                    
+                    // Only index Crimes Act sections for search
+                    if (sectionData.act.includes('Crimes Act')) {
+                        const searchableText = [
+                            sectionNumber,
+                            sectionData.title,
+                            sectionData.text
+                        ].join(' ').toLowerCase();
 
-                    // Create searchable terms
-                    const terms = searchableText
-                        .replace(/[^\w\s]/g, ' ')
-                        .split(/\s+/)
-                        .filter(term => term.length > 2);
+                        // Create searchable terms
+                        const terms = searchableText
+                            .replace(/[^\w\s]/g, ' ')
+                            .split(/\s+/)
+                            .filter(term => term.length > 2);
 
-                    terms.forEach(term => {
-                        if (!this.searchIndex.has(term)) {
-                            this.searchIndex.set(term, new Set());
-                        }
-                        this.searchIndex.get(term).add(sectionNumber);
-                    });
+                        terms.forEach(term => {
+                            if (!this.searchIndex.has(term)) {
+                                this.searchIndex.set(term, new Set());
+                            }
+                            this.searchIndex.get(term).add(sectionNumber);
+                        });
 
-                    // Index by section number patterns
-                    const sectionPatterns = [
-                        sectionNumber,
-                        `s${sectionNumber}`,
-                        `s.${sectionNumber}`,
-                        `section${sectionNumber}`,
-                        `section ${sectionNumber}`
-                    ];
+                        // Index by section number patterns - CRIMES ACT ONLY
+                        const sectionPatterns = [
+                            sectionNumber,
+                            `s${sectionNumber}`,
+                            `s.${sectionNumber}`,
+                            `section${sectionNumber}`,
+                            `section ${sectionNumber}`
+                        ];
 
-                    sectionPatterns.forEach(pattern => {
-                        this.searchIndex.set(pattern.toLowerCase(), new Set([sectionNumber]));
-                    });
+                        sectionPatterns.forEach(pattern => {
+                            this.searchIndex.set(pattern.toLowerCase(), new Set([sectionNumber]));
+                        });
+                    }
                 }
 
                 this.buildConceptMap(processor);
+                console.log('Search index built - Crimes Act sections only');
             }
 
             buildConceptMap(processor) {
@@ -1383,26 +1412,50 @@
                     .split(/\s+/)
                     .filter(term => term.length > 1);
 
-                // Direct section number search
+                // Direct section number search - prioritize exact matches in Crimes Act
                 const sectionMatch = query.match(/\b(\d+[A-Z]*)\b/);
                 if (sectionMatch) {
                     const section = sectionMatch[1];
+                    
+                    // Check if this exact section exists in Crimes Act
+                    const crimesSection = legislativeSystem.processor.findSectionInAct(section, 'Crimes Act');
+                    if (crimesSection) {
+                        results.add(section);
+                    }
+                    
+                    // Also check indexed patterns
                     if (this.searchIndex.has(section.toLowerCase())) {
-                        this.searchIndex.get(section.toLowerCase()).forEach(sec => results.add(sec));
+                        this.searchIndex.get(section.toLowerCase()).forEach(sec => {
+                            // Verify it's from Crimes Act
+                            const sectionData = legislativeSystem.processor.sections.get(sec);
+                            if (sectionData && sectionData.act.includes('Crimes Act')) {
+                                results.add(sec);
+                            }
+                        });
                     }
                 }
 
-                // Term-based search
+                // Term-based search - only return Crimes Act sections
                 searchTerms.forEach(term => {
                     if (this.searchIndex.has(term)) {
-                        this.searchIndex.get(term).forEach(section => results.add(section));
+                        this.searchIndex.get(term).forEach(section => {
+                            const sectionData = legislativeSystem.processor.sections.get(section);
+                            if (sectionData && sectionData.act.includes('Crimes Act')) {
+                                results.add(section);
+                            }
+                        });
                     }
                 });
 
-                // Concept search
+                // Concept search - only return Crimes Act sections
                 searchTerms.forEach(term => {
                     if (this.conceptMap.has(term)) {
-                        this.conceptMap.get(term).forEach(section => results.add(section));
+                        this.conceptMap.get(term).forEach(section => {
+                            const sectionData = legislativeSystem.processor.sections.get(section);
+                            if (sectionData && sectionData.act.includes('Crimes Act')) {
+                                results.add(section);
+                            }
+                        });
                     }
                 });
 
@@ -1415,32 +1468,73 @@
                 const suggestions = [];
                 const queryLower = query.toLowerCase();
 
-                // Section number suggestions
+                // Section number suggestions - CRIMES ACT ONLY
                 const sectionPattern = /\d+[A-Z]*/;
                 if (sectionPattern.test(query)) {
                     for (const [section, data] of legislativeSystem.processor.sections) {
-                        if (section.toLowerCase().includes(queryLower)) {
+                        // Only suggest Crimes Act sections
+                        if (data.act.includes('Crimes Act') && section.toLowerCase().includes(queryLower)) {
                             suggestions.push({
                                 type: 'section',
-                                text: `Section ${section} - ${data.title}`,
+                                text: `Section ${section} - ${data.title} (Crimes Act)`,
                                 value: section
                             });
                         }
                     }
                 }
 
-                // Title-based suggestions
+                // Title-based suggestions - CRIMES ACT ONLY
                 for (const [section, title] of legislativeSystem.processor.sectionTitles) {
-                    if (title.toLowerCase().includes(queryLower)) {
+                    const sectionData = legislativeSystem.processor.sections.get(section);
+                    if (sectionData && sectionData.act.includes('Crimes Act') && 
+                        title.toLowerCase().includes(queryLower)) {
                         suggestions.push({
                             type: 'title',
-                            text: `${title} (s.${section})`,
+                            text: `${title} (s.${section} Crimes Act)`,
                             value: section
                         });
                     }
                 }
 
+                // Concept-based suggestions for common criminal law terms
+                const conceptSuggestions = this.getConceptSuggestions(queryLower);
+                suggestions.push(...conceptSuggestions);
+
                 return suggestions.slice(0, 10);
+            }
+
+            getConceptSuggestions(query) {
+                const suggestions = [];
+                const commonConcepts = {
+                    'assault': ['60', '59', '61'],
+                    'sexual': ['61I', '61J', '61KC'],
+                    'theft': ['117'],
+                    'larceny': ['117'],
+                    'fraud': ['178A', '178B', '178BA'],
+                    'murder': ['19A'],
+                    'manslaughter': ['18'],
+                    'robbery': ['94', '95', '96'],
+                    'break': ['109', '110', '111'],
+                    'drug': ['25A', '25B'],
+                    'weapon': ['93FA', '93G']
+                };
+
+                for (const [concept, sections] of Object.entries(commonConcepts)) {
+                    if (concept.includes(query) || query.includes(concept)) {
+                        sections.forEach(section => {
+                            const sectionData = legislativeSystem.processor.sections.get(section);
+                            if (sectionData && sectionData.act.includes('Crimes Act')) {
+                                suggestions.push({
+                                    type: 'concept',
+                                    text: `${concept} offence - s.${section} ${sectionData.title}`,
+                                    value: section
+                                });
+                            }
+                        });
+                    }
+                }
+
+                return suggestions.slice(0, 3); // Limit concept suggestions
             }
         }
 
